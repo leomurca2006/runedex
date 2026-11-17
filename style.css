@@ -383,6 +383,7 @@ main { max-width: 1180px; margin: 0 auto; padding: 32px 16px 64px; }
 .suggestion-recyclage .bouton { width: auto; }
 .suggestion-recyclage[hidden] { display: none; }
 .case-possedee { display: flex; flex-direction: column; gap: 6px; }
+.case-possedee[hidden], .case-vide[hidden], .choix-carte[hidden] { display: none; } /* recherche */
 .bouton-recycler {
     width: 100%;
     padding: 6px;

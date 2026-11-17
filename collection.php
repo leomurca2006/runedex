@@ -142,13 +142,16 @@ $liste = array_merge(array_intersect_key($liste, $favoris), $liste);
         <?php if (!$possedes): ?>
             <p class="message">Ton album est vide. <a href="booster.html">Ouvre un booster</a> pour obtenir tes 5 premiers champions.</p>
         <?php endif; ?>
-        <div class="album">
+        <div class="recherche recherche-objets">
+            <input class="champ" type="search" id="rechercheChampion" placeholder="Chercher un champion, ex. Ah" aria-label="Chercher un champion" autocomplete="off">
+        </div>
+        <div class="album" id="album">
         <?php foreach ($liste as $cle => $champ):
             $nom = $champ['name'] ?? $cle;
             $nb = $possedes[$cle] ?? 0;
         ?>
             <?php if ($nb): ?>
-            <div class="case-possedee" id="carte-<?= htmlspecialchars($cle) ?>">
+            <div class="case-possedee" id="carte-<?= htmlspecialchars($cle) ?>" data-nom="<?= htmlspecialchars($nom) ?>">
                 <div class="carte">
                     <img src="https://ddragon.leagueoflegends.com/cdn/img/champion/loading/<?= urlencode($cle) ?>_<?= (int) $skinsEquipes[$cle] ?>.jpg" alt="<?= htmlspecialchars($nom) ?>" width="154" height="280" loading="lazy">
                     <h4><?= htmlspecialchars($nom) ?></h4>
@@ -181,7 +184,7 @@ $liste = array_merge(array_intersect_key($liste, $favoris), $liste);
                 </form>
             </div>
             <?php else: ?>
-            <div class="case-vide">
+            <div class="case-vide" data-nom="<?= htmlspecialchars($nom) ?>">
                 <img src="https://ddragon.leagueoflegends.com/cdn/<?= VERSION ?>/img/champion/<?= urlencode($cle) ?>.png" alt="" width="56" height="56" loading="lazy">
                 <?= htmlspecialchars($nom) ?>
             </div>
@@ -200,6 +203,15 @@ $liste = array_merge(array_intersect_key($liste, $favoris), $liste);
         </div>
     </dialog>
     <script>
+        // Recherche : on cache les cases dont le nom ne commence pas par la saisie (même règle que api.html)
+        const simplifier = texte => texte.toLowerCase().normalize('NFD').replace(/[^a-z0-9]/g, '');
+        document.getElementById('rechercheChampion').addEventListener('input', event => {
+            const debut = simplifier(event.target.value);
+            document.querySelectorAll('#album > div').forEach(cas => {
+                cas.hidden = !simplifier(cas.dataset.nom).startsWith(debut);
+            });
+        });
+
         // Bouton "Skins" d'une carte : on charge la liste des skins du champion (APISite.php) et on l'affiche
         const modaleSkins = document.getElementById('modaleSkins');
         const grilleSkins = document.getElementById('grilleSkins');

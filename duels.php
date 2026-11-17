@@ -115,9 +115,12 @@ $iconeObjet = fn($cle) => 'https://ddragon.leagueoflegends.com/cdn/' . VERSION .
         <form class="panneau formulaire-duel" id="formDuel">
             <fieldset>
                 <legend>1. Choisis ton champion</legend>
-                <div class="grille-choix">
+                <div class="recherche recherche-objets">
+                    <input class="champ" type="search" id="rechercheChampion" placeholder="Chercher un champion, ex. Ah" aria-label="Chercher un champion" autocomplete="off">
+                </div>
+                <div class="grille-choix" id="grilleChoix">
                     <?php foreach ($mesCartes as $carte): $cle = $carte['champion']; ?>
-                        <label class="choix-carte"><input type="radio" name="champion" value="<?= h($cle) ?>" required
+                        <label class="choix-carte" data-nom="<?= h($champions[$cle]['name']) ?>"><input type="radio" name="champion" value="<?= h($cle) ?>" required
                             data-nom="<?= h($champions[$cle]['name']) ?>" data-image="<?= h($image($cle, $carte['skin'])) ?>"
                             data-stats="<?= h(json_encode(statsChampion($champions[$cle]))) ?>">
                             <img src="<?= h($image($cle, $carte['skin'])) ?>" alt="" width="77" height="140" loading="lazy">

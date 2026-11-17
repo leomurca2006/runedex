@@ -60,6 +60,20 @@ if (formDuel) {
     }
     formDuel.addEventListener('change', majApercu);
 
+    // Recherche : on cache les champions dont le nom ne commence pas par la saisie (même règle que api.html)
+    const simplifier = texte => texte.toLowerCase().normalize('NFD').replace(/[^a-z0-9]/g, '');
+    const rechercheChampion = document.getElementById('rechercheChampion');
+    rechercheChampion.addEventListener('input', () => {
+        const debut = simplifier(rechercheChampion.value);
+        document.querySelectorAll('#grilleChoix > label').forEach(choix => {
+            choix.hidden = !simplifier(choix.dataset.nom).startsWith(debut);
+        });
+    });
+    // Le champ est dans le formulaire : sans ça, Entrée lancerait le combat
+    rechercheChampion.addEventListener('keydown', event => {
+        if (event.key === 'Enter') event.preventDefault();
+    });
+
     formDuel.addEventListener('submit', event => {
         event.preventDefault();
         bouton.disabled = true;
