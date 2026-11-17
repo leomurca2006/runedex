@@ -39,6 +39,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'fabri
         }
     }
     ajouterObjet($pdo, $id, $cle, $cible['type']);
+    avancerMission($pdo, $id, 'fabrication');
     $pdo->commit();
     $reponse['fabrique'] = $cle;
 }

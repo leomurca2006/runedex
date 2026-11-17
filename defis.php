@@ -96,6 +96,12 @@ function reclamer($pdo, $moi, $cles) {
 }
 
 $action = $_POST['action'] ?? '';
+if ($action === 'mission') {
+    $gain = reclamerMission($pdo, $moi, (string) ($_POST['mission'] ?? ''));
+    $_SESSION['message'] = $gain ? "Mission accomplie : +$gain rubis !" : 'Mission pas terminée ou déjà expirée.';
+    header('Location: defis.php');
+    exit;
+}
 if ($action === 'reclamer' || $action === 'tout') {
     $cle = (string) ($_POST['defi'] ?? '');
     [$nombre, $gain] = reclamer($pdo, $moi, $action === 'tout' ? array_keys(DEFIS) : [$cle]);
@@ -113,6 +119,7 @@ if ($action === 'reclamer' || $action === 'tout') {
 $message = $_SESSION['message'] ?? '';
 unset($_SESSION['message']);
 [$mesures, $totaux] = mesures($pdo, $moi);
+$missions = etatMissions($pdo, $moi);
 $req = $pdo->prepare('SELECT defi FROM defis_reussis WHERE compte_id = ?');
 $req->execute([$moi]);
 $reussis = array_flip($req->fetchAll(PDO::FETCH_COLUMN));
@@ -164,6 +171,32 @@ $prets = array_filter(DEFIS, function ($defi, $cle) use ($mesures, $totaux, $reu
         <?php if ($message): ?>
             <p class="message" role="status"><?= h($message) ?></p>
         <?php endif; ?>
+        <h2>Missions</h2>
+        <p class="info-expedition">Les missions du jour changent à minuit, celles de la semaine le lundi.</p>
+        <div class="grille-defis grille-missions">
+            <?php foreach ($missions as $cle => $mission):
+                $fait = $mission['reclamee'];
+                $pret = !$fait && $mission['fait'] >= $mission['objectif'];
+            ?>
+                <form method="post" class="defi panneau<?= $fait ? ' defi-fait' : '' ?><?= $pret ? ' defi-pret' : '' ?>">
+                    <p class="etiquette etiquette-mission"><?= $mission['sorte'] === 'jour' ? 'Du jour' : 'De la semaine' ?></p>
+                    <h3><?= h($mission['texte']) ?></h3>
+                    <p class="defi-progres">
+                        <span><?= min($mission['fait'], $mission['objectif']) ?>/<?= $mission['objectif'] ?></span>
+                        <span class="barre"><span style="width:<?= min(100, round(100 * $mission['fait'] / $mission['objectif'])) ?>%"></span></span>
+                    </p>
+                    <p class="defi-recompense"><i class="material-icons rubis-icone" aria-hidden="true">diamond</i>+<?= $mission['rubis'] ?> rubis</p>
+                    <?php if ($fait): ?>
+                        <p class="defi-statut"><i class="material-icons" aria-hidden="true">check_circle</i>Récupérée</p>
+                    <?php elseif ($pret): ?>
+                        <input type="hidden" name="mission" value="<?= h($cle) ?>">
+                        <button class="bouton bouton-or" name="action" value="mission">Récupérer</button>
+                    <?php endif; ?>
+                </form>
+            <?php endforeach; ?>
+        </div>
+
+        <h2>Défis</h2>
         <?php if (count($prets) > 1): ?>
             <form method="post" class="quotidien panneau">
                 <i class="material-icons rubis-icone" aria-hidden="true">emoji_events</i>

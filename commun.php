@@ -105,6 +105,7 @@ function recyclerCarte($pdo, $id, $cle) {
         return 0;
     }
     $pdo->prepare('UPDATE comptes SET rubis = rubis + ? WHERE id = ?')->execute([RUBIS_PAR_CARTE, $id]);
+    avancerMission($pdo, $id, 'recyclage');
     $pdo->commit();
     return RUBIS_PAR_CARTE;
 }
@@ -120,9 +121,11 @@ function recyclerDoublons($pdo, $id, $type = 'champions') {
     $pdo->beginTransaction();
     $req = $pdo->prepare("SELECT COALESCE(SUM(nombre - 1), 0) FROM $table WHERE compte_id = ? $filtre AND nombre > 1");
     $req->execute($valeurs);
-    $gain = $req->fetchColumn() * RUBIS_RECYCLAGE[$type];
+    $recycles = (int) $req->fetchColumn();
+    $gain = $recycles * RUBIS_RECYCLAGE[$type];
     $pdo->prepare("UPDATE $table SET nombre = 1 WHERE compte_id = ? $filtre AND nombre > 1")->execute($valeurs);
     $pdo->prepare('UPDATE comptes SET rubis = rubis + ? WHERE id = ?')->execute([$gain, $id]);
+    avancerMission($pdo, $id, 'recyclage', $recycles);
     $pdo->commit();
     return $gain;
 }
@@ -216,7 +219,9 @@ function ameliorerCarte($pdo, $compteId, $cle) {
     $req = $pdo->prepare('UPDATE cartes SET nombre = nombre - (1 << (etoiles - 1)), etoiles = etoiles + 1
         WHERE compte_id = ? AND champion = ? AND etoiles < ? AND nombre - 1 >= (1 << (etoiles - 1))');
     $req->execute([$compteId, $cle, ETOILES_MAX]);
-    return $req->rowCount() === 1;
+    if ($req->rowCount() !== 1) return false;
+    avancerMission($pdo, $compteId, 'etoile');
+    return true;
 }
 
 // Skins d'un champion : [num => nom], sans le skin de base. null si Riot ne répond pas.
@@ -458,4 +463,90 @@ function profilJoueur($pdo, $id) {
     $profil['avatar'] = $cartes[$profil['avatar']] ?? null;
     $profil['vitrine'] = array_values(array_filter(array_map(fn($cle) => $cartes[$cle] ?? null, json_decode($profil['vitrine'], true) ?: [])));
     return $profil;
+}
+
+// Missions : 3 du jour + 3 de la semaine, tirées au hasard dans MISSIONS, renouvelées à minuit et le lundi (heure de Paris).
+// Chaque action du joueur fait avancer un compteur (avancerMission). Affichées et récupérées dans defis.php.
+const MISSIONS = [
+    'booster'     => ['texte' => 'Ouvrir %d boosters',                 'jour' => 5,  'semaine' => 25],
+    'duel'        => ['texte' => 'Faire %d duels',                     'jour' => 3,  'semaine' => 3],
+    'expedition'  => ['texte' => 'Envoyer %d champions en expédition', 'jour' => 2,  'semaine' => 10],
+    'recyclage'   => ['texte' => 'Recycler %d cartes',                 'jour' => 10, 'semaine' => 50],
+    'etoile'      => ['texte' => 'Améliorer %d fois un champion',      'jour' => 1,  'semaine' => 5],
+    'fabrication' => ['texte' => 'Fabriquer %d objet%s',               'jour' => 1,  'semaine' => 5], // %s = "s" au pluriel
+];
+const MISSIONS_PAR_PERIODE = 3;
+const RUBIS_MISSION = ['jour' => 30, 'semaine' => 120];
+
+// Une ligne par compte, période et action : "nombre" = combien de fois c'est fait, "reclamee" = récompense prise
+$pdo->exec('CREATE TABLE IF NOT EXISTS missions (
+    compte_id INTEGER NOT NULL REFERENCES comptes(id),
+    periode TEXT NOT NULL, -- "j2026-11-17" (jour) ou "s2026-W47" (semaine)
+    action TEXT NOT NULL,
+    nombre INTEGER NOT NULL DEFAULT 0,
+    reclamee INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (compte_id, periode, action)
+)');
+
+function periodesMissions() {
+    return ['jour' => 'j' . date('Y-m-d'), 'semaine' => 's' . date('o-\WW')]; // o-\WW = année et numéro de semaine ISO
+}
+
+// Les missions en cours : toujours le même tirage pour un joueur pendant toute la période (graine fixe, comme botDuPalier)
+function missionsDuMoment($compteId) {
+    $missions = [];
+    foreach (periodesMissions() as $sorte => $periode) {
+        mt_srand(crc32("missions-$compteId-$periode"));
+        foreach ((array) array_rand(MISSIONS, MISSIONS_PAR_PERIODE) as $action) {
+            $objectif = MISSIONS[$action][$sorte];
+            $missions["$periode/$action"] = ['sorte' => $sorte, 'periode' => $periode, 'action' => $action, 'objectif' => $objectif,
+                'texte' => sprintf(MISSIONS[$action]['texte'], $objectif, $objectif > 1 ? 's' : ''), 'rubis' => RUBIS_MISSION[$sorte]];
+        }
+    }
+    mt_srand(); // on remet du vrai hasard pour la suite
+    return $missions;
+}
+
+// Le joueur a fait $nombre fois l'action : on compte pour le jour ET la semaine (même si la mission n'est pas tirée, c'est plus simple)
+function avancerMission($pdo, $compteId, $action, $nombre = 1) {
+    if ($nombre <= 0) return;
+    $req = $pdo->prepare('INSERT INTO missions (compte_id, periode, action, nombre) VALUES (?, ?, ?, ?)
+        ON CONFLICT (compte_id, periode, action) DO UPDATE SET nombre = nombre + excluded.nombre');
+    foreach (periodesMissions() as $periode) {
+        $req->execute([$compteId, $periode, $action, $nombre]);
+    }
+}
+
+// Missions en cours avec la progression ("fait" et "reclamee") ; efface au passage les compteurs des périodes finies
+function etatMissions($pdo, $compteId) {
+    $periodes = array_values(periodesMissions());
+    $pdo->prepare('DELETE FROM missions WHERE compte_id = ? AND periode NOT IN (?, ?)')->execute([$compteId, ...$periodes]);
+    $req = $pdo->prepare('SELECT periode, action, nombre, reclamee FROM missions WHERE compte_id = ?');
+    $req->execute([$compteId]);
+    $compteurs = [];
+    foreach ($req->fetchAll() as $ligne) $compteurs["$ligne[periode]/$ligne[action]"] = $ligne;
+    $missions = missionsDuMoment($compteId);
+    foreach ($missions as $cle => &$mission) {
+        $mission['fait'] = (int) ($compteurs[$cle]['nombre'] ?? 0);
+        $mission['reclamee'] = (bool) ($compteurs[$cle]['reclamee'] ?? false);
+    }
+    unset($mission); // fin du & : sinon $mission reste lié au dernier élément
+    return $missions;
+}
+
+// Récupère la récompense d'une mission terminée ("j2026-11-17/duel") ; renvoie les rubis gagnés (0 si impossible)
+function reclamerMission($pdo, $compteId, $cle) {
+    $mission = missionsDuMoment($compteId)[$cle] ?? null; // une mission d'hier ou inventée est refusée
+    if (!$mission) return 0;
+    $pdo->beginTransaction();
+    // "reclamee = 0" dans la même requête : un double clic ne paie qu'une fois
+    $req = $pdo->prepare('UPDATE missions SET reclamee = 1 WHERE compte_id = ? AND periode = ? AND action = ? AND reclamee = 0 AND nombre >= ?');
+    $req->execute([$compteId, $mission['periode'], $mission['action'], $mission['objectif']]);
+    if ($req->rowCount() === 0) {
+        $pdo->rollBack();
+        return 0;
+    }
+    $pdo->prepare('UPDATE comptes SET rubis = rubis + ? WHERE id = ?')->execute([$mission['rubis'], $compteId]);
+    $pdo->commit();
+    return $mission['rubis'];
 }

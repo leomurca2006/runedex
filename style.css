@@ -730,6 +730,9 @@ main { max-width: 1180px; margin: 0 auto; padding: 32px 16px 64px; }
 .grille-defis { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 16px; }
 .defi { display: flex; flex-direction: column; gap: 8px; padding: 20px; }
 .defi h2 { margin: 0; font-size: 1.2rem; }
+.defi h3 { margin: 0; font-size: 1.05rem; }
+.grille-missions { margin-bottom: 32px; }
+.etiquette-mission { align-self: flex-start; font-size: .75rem; }
 .defi p { margin: 0; }
 .defi-texte { color: var(--doux); }
 .defi-progres { display: grid; gap: 4px; font-weight: 700; font-variant-numeric: tabular-nums; }

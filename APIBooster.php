@@ -116,6 +116,7 @@ for ($b = 0; $b < $nombre; $b++) {
     shuffle($cartes); // array_rand renvoie les clés dans l'ordre
     $boosters[] = $cartes;
 }
+avancerMission($pdo, $id, 'booster', $nombre);
 $pdo->commit();
 
 echo json_encode(['boosters' => $boosters, 'holos' => $holos] + etatStock($pdo, $id) + etatRubis($pdo, $id));

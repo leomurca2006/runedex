@@ -38,6 +38,7 @@ $palier = (int) $req->fetchColumn();
 $bot = botDuPalier($id, $palier, $champions, $objets);
 $stats = statsCombat($champions[$champion], array_map(fn($objet) => $objets[$objet], $choix), ($etoiles - 1) * BONUS_ETOILE);
 [$victoire, $coups] = simulerDuel($stats, $bot['stats']);
+avancerMission($pdo, $id, 'duel'); // victoire ou défaite : la mission compte les duels joués
 
 // Victoire sur un nouveau palier : rubis + palier suivant.
 // "AND palier_duel = :palier" : deux combats envoyés en même temps ne paient qu'une fois.

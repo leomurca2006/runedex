@@ -74,6 +74,7 @@ if ($action === 'envoyer') {
         $pdo->rollBack(); // l'objet retiré revient dans l'inventaire
         terminer('Impossible : champion déjà parti, pas à toi, ou plus de place libre.');
     }
+    avancerMission($pdo, $moi, 'expedition');
     $pdo->commit();
     terminer('C\'est parti pour ' . ROYAUMES[$royaume]['nom'] . ' ! Reviens quand l\'expédition est terminée.');
 }
