@@ -21,7 +21,11 @@ $portrait = fn($carte) => 'https://ddragon.leagueoflegends.com/cdn/img/champion/
         <p class="stat"><strong><?= $profil['skins'] ?></strong><span>skins</span></p>
         <p class="stat"><strong><?= $profil['objets'] ?></strong><span>objets complets</span></p>
         <p class="stat"><strong><?= $profil['defis'] ?></strong><span>défis</span></p>
-        <p class="stat"><strong><?= min($profil['palier_duel'] - 1, PALIERS_DUEL) ?><small>/<?= PALIERS_DUEL ?></small></strong><span>bots battus</span></p>
+        <?php if (recordTour($profil['palier_duel'])): ?>
+            <p class="stat"><strong><?= recordTour($profil['palier_duel']) ?></strong><span>étage record (tour)</span></p>
+        <?php else: ?>
+            <p class="stat"><strong><?= min($profil['palier_duel'] - 1, PALIERS_DUEL) ?><small>/<?= PALIERS_DUEL ?></small></strong><span>bots battus</span></p>
+        <?php endif; ?>
     </div>
     <h2>Vitrine</h2>
     <?php if (!$profil['vitrine']): ?>

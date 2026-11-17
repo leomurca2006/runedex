@@ -28,6 +28,13 @@ $req = $pdo->prepare('SELECT objet FROM objets_debloques WHERE compte_id = ?');
 $req->execute([$id]);
 if (array_diff($choix, $req->fetchAll(PDO::FETCH_COLUMN))) erreur(400, 'objets');
 
+// action=sauver : on enregistre seulement le stuff (objets cochés) de ce champion, sans combattre
+if (($_POST['action'] ?? '') === 'sauver') {
+    $pdo->prepare('UPDATE cartes SET stuff = ? WHERE compte_id = ? AND champion = ?')->execute([json_encode($choix), $id, $champion]);
+    echo json_encode(['sauve' => true]);
+    exit;
+}
+
 $champions = listeChampions();
 $objets = listeObjets();
 if ($champions === null || $objets === null) erreur(502, 'api');
@@ -43,10 +50,10 @@ avancerMission($pdo, $id, 'duel'); // victoire ou défaite : la mission compte l
 // Victoire sur un nouveau palier : rubis + palier suivant.
 // "AND palier_duel = :palier" : deux combats envoyés en même temps ne paient qu'une fois.
 $gain = 0;
-if ($victoire && $palier <= PALIERS_DUEL) {
+if ($victoire) { // plus de dernier palier : après le 10, c'est la tour infinie
     $req = $pdo->prepare('UPDATE comptes SET palier_duel = palier_duel + 1, rubis = rubis + :gain WHERE id = :id AND palier_duel = :palier');
-    $req->execute(['gain' => RUBIS_PAR_PALIER * $palier, 'id' => $id, 'palier' => $palier]);
-    if ($req->rowCount() === 1) $gain = RUBIS_PAR_PALIER * $palier;
+    $req->execute(['gain' => gainPalier($palier), 'id' => $id, 'palier' => $palier]);
+    if ($req->rowCount() === 1) $gain = gainPalier($palier);
 }
 
 echo json_encode([

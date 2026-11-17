@@ -19,13 +19,15 @@ $req = $pdo->prepare('SELECT palier_duel, rubis FROM comptes WHERE id = ?');
 $req->execute([$moi]);
 $compte = $req->fetch();
 $palier = (int) $compte['palier_duel'];
-$termine = $palier > PALIERS_DUEL; // tous les bots battus : on peut rejouer le dernier pour le plaisir
+$dansLaTour = $palier > PALIERS_DUEL; // les 10 bots sont battus : on monte dans la tour infinie
+$etage = $palier - PALIERS_DUEL;      // étage actuel de la tour (palier 11 = étage 1)
+$record = recordTour($palier);
 
 if ($riotOk) {
     $bot = botDuPalier($moi, $palier, $champions, $objets);
 
     // Mes champions (avec leur skin équipé) et mes objets, avec de quoi calculer l'aperçu des stats en JS
-    $req = $pdo->prepare('SELECT champion, skin, etoiles FROM cartes WHERE compte_id = ? ORDER BY champion');
+    $req = $pdo->prepare('SELECT champion, skin, etoiles, stuff FROM cartes WHERE compte_id = ? ORDER BY champion');
     $req->execute([$moi]);
     $mesCartes = array_filter($req->fetchAll(), fn($carte) => isset($champions[$carte['champion']]));
     $req = $pdo->prepare('SELECT objet, nombre FROM objets_debloques WHERE compte_id = ?');
@@ -74,10 +76,17 @@ $iconeObjet = fn($cle) => 'https://ddragon.leagueoflegends.com/cdn/' . VERSION .
         <div class="album-tete">
             <div>
                 <h1>Duels</h1>
-                <p class="info-expedition">Bats les <?= PALIERS_DUEL ?> bots, du plus faible au plus fort. Chaque bot battu pour la première fois rapporte des rubis.</p>
+                <p class="info-expedition"><?= $dansLaTour
+                    ? 'Les ' . PALIERS_DUEL . ' bots sont battus : bienvenue dans la tour infinie ! Chaque étage est plus dur que le précédent (+' . BONUS_ETAGE . ' % de stats).'
+                    : 'Bats les ' . PALIERS_DUEL . ' bots, du plus faible au plus fort, puis grimpe dans la tour infinie. Chaque bot battu pour la première fois rapporte des rubis.' ?></p>
             </div>
             <div class="stats panneau">
-                <p class="stat"><strong><?= min($palier, PALIERS_DUEL) ?><small>/<?= PALIERS_DUEL ?></small></strong><span>palier</span></p>
+                <?php if ($dansLaTour): ?>
+                    <p class="stat"><strong><?= $etage ?></strong><span>étage</span></p>
+                    <p class="stat"><strong><?= $record ?></strong><span>record</span></p>
+                <?php else: ?>
+                    <p class="stat"><strong><?= $palier ?><small>/<?= PALIERS_DUEL ?></small></strong><span>palier</span></p>
+                <?php endif; ?>
                 <p class="stat stat-rubis"><strong><i class="material-icons rubis-icone" aria-hidden="true">diamond</i><?= $compte['rubis'] ?></strong><span>rubis</span></p>
             </div>
         </div>
@@ -96,7 +105,7 @@ $iconeObjet = fn($cle) => 'https://ddragon.leagueoflegends.com/cdn/' . VERSION .
             </section>
             <p class="vs" aria-hidden="true">VS</p>
             <section class="panneau combattant" id="coteBot" data-stats="<?= h(json_encode($bot['stats'])) ?>">
-                <h2><?= $termine ? 'Bot final' : 'Bot du palier ' . $palier ?></h2>
+                <h2><?= $dansLaTour ? 'Tour infinie : étage ' . $etage : 'Bot du palier ' . $palier ?></h2>
                 <img class="combattant-image" src="<?= h($image($bot['cle'])) ?>" alt="" width="154" height="280">
                 <p class="combattant-nom"><?= h($bot['nom']) ?><?= $bot['bonus'] ? ' <span class="etiquette">+' . $bot['bonus'] . ' % de stats</span>' : '' ?></p>
                 <p class="objets-bot">
@@ -106,9 +115,7 @@ $iconeObjet = fn($cle) => 'https://ddragon.leagueoflegends.com/cdn/' . VERSION .
                     <?php if (!$bot['objets']): ?>Aucun objet<?php endif; ?>
                 </p>
                 <dl class="stats-duel" id="statsBot"></dl>
-                <p class="recompense-duel"><?= $termine
-                    ? 'Tous les bots sont battus ! Tu peux rejouer celui-ci pour le plaisir.'
-                    : '<i class="material-icons rubis-icone" aria-hidden="true">diamond</i>+' . RUBIS_PAR_PALIER * $palier . ' rubis si tu gagnes' ?></p>
+                <p class="recompense-duel"><i class="material-icons rubis-icone" aria-hidden="true">diamond</i>+<?= gainPalier($palier) ?> rubis si tu gagnes</p>
             </section>
         </div>
 
@@ -119,11 +126,15 @@ $iconeObjet = fn($cle) => 'https://ddragon.leagueoflegends.com/cdn/' . VERSION .
                     <input class="champ" type="search" id="rechercheChampion" placeholder="Chercher un champion, ex. Ah" aria-label="Chercher un champion" autocomplete="off">
                 </div>
                 <div class="grille-choix" id="grilleChoix">
-                    <?php foreach ($mesCartes as $carte): $cle = $carte['champion']; ?>
+                    <?php foreach ($mesCartes as $carte): $cle = $carte['champion'];
+                        // Stuff sauvegardé, sans les objets qu'on n'a plus (fabriqués, partis en expédition...)
+                        $stuff = array_values(array_filter(json_decode($carte['stuff'], true) ?: [], fn($objet) => isset($mesObjets[$objet])));
+                    ?>
                         <label class="choix-carte" data-nom="<?= h($champions[$cle]['name']) ?>"><input type="radio" name="champion" value="<?= h($cle) ?>" required
                             data-nom="<?= h($champions[$cle]['name']) ?>" data-image="<?= h($image($cle, $carte['skin'])) ?>"
                             data-stats="<?= h(json_encode(statsChampion($champions[$cle]))) ?>"
-                            data-bonus-etoiles="<?= ($carte['etoiles'] - 1) * BONUS_ETOILE ?>">
+                            data-bonus-etoiles="<?= ($carte['etoiles'] - 1) * BONUS_ETOILE ?>"
+                            data-stuff="<?= h(json_encode($stuff)) ?>">
                             <img src="<?= h($image($cle, $carte['skin'])) ?>" alt="" width="77" height="140" loading="lazy">
                             <span class="choix-nom"><?= h($champions[$cle]['name']) ?></span>
                             <span class="choix-etoiles" role="img" aria-label="<?= $carte['etoiles'] ?> sur <?= ETOILES_MAX ?> étoiles"><?= str_repeat('★', $carte['etoiles']) ?></span></label>
@@ -144,6 +155,11 @@ $iconeObjet = fn($cle) => 'https://ddragon.leagueoflegends.com/cdn/' . VERSION .
                         </label>
                     <?php endforeach; ?>
                 </div>
+                <?php if ($mesObjets): ?>
+                    <button type="button" class="bouton-recycler bouton-stuff" id="sauverStuff" disabled>
+                        <i class="material-icons" aria-hidden="true">save</i> Sauvegarder ce stuff pour ce champion
+                    </button>
+                <?php endif; ?>
             </fieldset>
             <button class="bouton bouton-or" id="combattre" disabled>Combattre</button>
             <p class="info-expedition" id="infoDuel" aria-live="polite">Les objets ne sont pas consommés : tu les gardes après le combat.</p>

@@ -12,7 +12,7 @@ function h($texte) {
 }
 
 // Tous les joueurs avec leurs chiffres, classés par nombre de champions (puis de skins)
-$joueurs = $pdo->query("SELECT c.id, c.pseudo,
+$joueurs = $pdo->query("SELECT c.id, c.pseudo, c.palier_duel,
     (SELECT COUNT(*) FROM cartes WHERE compte_id = c.id) AS champions,
     (SELECT COUNT(*) FROM skins_debloques WHERE compte_id = c.id) AS skins,
     (SELECT COUNT(*) FROM objets_debloques WHERE compte_id = c.id AND type = 'objets') AS objets,
@@ -95,7 +95,7 @@ if ($profil) {
             <h2>Classement</h2>
             <table class="classement">
                 <thead>
-                    <tr><th>#</th><th>Joueur</th><th>Champions</th><th>Skins</th><th>Objets complets</th><th>Défis</th></tr>
+                    <tr><th>#</th><th>Joueur</th><th>Champions</th><th>Skins</th><th>Objets complets</th><th>Défis</th><th>Tour infinie</th></tr>
                 </thead>
                 <tbody>
                     <?php foreach ($joueurs as $rang => $joueur): ?>
@@ -106,6 +106,7 @@ if ($profil) {
                             <td><?= $joueur['skins'] ?></td>
                             <td><?= $joueur['objets'] ?></td>
                             <td><?= $joueur['defis'] ?></td>
+                            <td><?= recordTour($joueur['palier_duel']) ? 'Étage ' . recordTour($joueur['palier_duel']) : '—' ?></td>
                         </tr>
                     <?php endforeach; ?>
                 </tbody>

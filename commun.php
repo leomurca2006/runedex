@@ -347,7 +347,21 @@ function etatStock($pdo, $id) {
 const PALIERS_DUEL = 10;
 const OBJETS_MAX_DUEL = 6;
 const RUBIS_PAR_PALIER = 30; // palier p battu pour la 1re fois = 30 × p rubis
-ajouterColonne($pdo, 'comptes', 'palier_duel', 'INTEGER NOT NULL DEFAULT 1'); // palier du prochain bot (11 = tous battus)
+ajouterColonne($pdo, 'cartes', 'stuff', "TEXT NOT NULL DEFAULT '[]'"); // objets sauvegardés pour ce champion en duel (JSON)
+// Tour infinie : après les 10 paliers, ça continue (palier 11 = étage 1, 12 = étage 2...) sans fin.
+const BONUS_ETAGE = 5;      // +5 % de stats en plus pour le bot à chaque étage
+const RUBIS_PAR_ETAGE = 100; // chaque nouvel étage battu
+ajouterColonne($pdo, 'comptes', 'palier_duel', 'INTEGER NOT NULL DEFAULT 1'); // palier du prochain bot (au-delà de 10 = tour infinie)
+
+// Rubis gagnés en battant ce palier pour la première fois
+function gainPalier($palier) {
+    return $palier <= PALIERS_DUEL ? RUBIS_PAR_PALIER * $palier : RUBIS_PAR_ETAGE;
+}
+
+// Meilleur étage de la tour battu (0 = pas encore dans la tour)
+function recordTour($palierDuel) {
+    return max(0, $palierDuel - 1 - PALIERS_DUEL);
+}
 
 // Stats d'un champion au niveau 18, sans objet.
 // Les champions n'ont pas de puissance magique de base : on la tire de leur note "magie" (0 à 10) de Data Dragon.
@@ -401,14 +415,14 @@ function statsCombat($champion, $objets, $bonus = 0) {
 // Le bot d'un palier : toujours le même pour un joueur et un palier (on peut donc préparer son build).
 // Palier 1 = sans objet, puis 1 objet complet de plus par palier (6 max) ; paliers 8 à 10 : +10/20/30 % de stats.
 function botDuPalier($compteId, $palier, $champions, $objets) {
-    $palier = min($palier, PALIERS_DUEL);
     mt_srand(crc32("bot-$compteId-$palier")); // graine fixe = même tirage à chaque fois
     $cle = (string) array_rand($champions);
     $complets = array_keys(array_filter($objets, fn($objet) => $objet['type'] === 'objets'));
     $nb = min(OBJETS_MAX_DUEL, $palier - 1);
     $choix = $nb ? array_map(fn($i) => (string) $complets[$i], (array) array_rand($complets, $nb)) : [];
     mt_srand(); // on remet du vrai hasard pour la suite (coups critiques)
-    $bonus = max(0, $palier - 7) * 10;
+    // Tour infinie : on repart des +30 % du palier 10 et on ajoute 5 % par étage (étage 1 = +35 %, étage 10 = +80 %...)
+    $bonus = $palier <= PALIERS_DUEL ? max(0, $palier - 7) * 10 : 30 + ($palier - PALIERS_DUEL) * BONUS_ETAGE;
     $stats = statsCombat($champions[$cle], array_map(fn($id) => $objets[$id], $choix), $bonus);
     return ['palier' => $palier, 'cle' => $cle, 'nom' => $champions[$cle]['name'], 'objets' => $choix, 'bonus' => $bonus, 'stats' => $stats];
 }

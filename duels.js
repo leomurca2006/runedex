@@ -56,12 +56,42 @@ if (formDuel) {
         document.getElementById('compteurObjets').textContent = `(${coches}/${OBJETS_MAX})`;
         const choix = formDuel.querySelector('[name="champion"]:checked');
         bouton.disabled = !choix;
+        if (boutonStuff) boutonStuff.disabled = !choix;
         if (!choix) return;
         document.getElementById('imageJoueur').src = choix.dataset.image;
         document.getElementById('nomJoueur').textContent = choix.dataset.nom;
         document.getElementById('statsJoueur').innerHTML = htmlStats(calculer(choix), statsBot);
     }
-    formDuel.addEventListener('change', majApercu);
+    formDuel.addEventListener('change', event => {
+        // Nouveau champion choisi : on coche son stuff sauvegardé (s'il en a un, sinon on garde les objets cochés)
+        if (event.target.name === 'champion') {
+            const stuff = JSON.parse(event.target.dataset.stuff);
+            if (stuff.length) caseObjets.forEach(caseObjet => { caseObjet.checked = stuff.includes(caseObjet.value); });
+        }
+        majApercu();
+    });
+
+    // Sauvegarde du stuff du champion choisi (bouton absent si on n'a aucun objet)
+    const boutonStuff = document.getElementById('sauverStuff');
+    boutonStuff?.addEventListener('click', () => {
+        const choix = formDuel.querySelector('[name="champion"]:checked');
+        const donnees = new FormData(formDuel);
+        donnees.append('action', 'sauver');
+        const info = document.getElementById('infoDuel');
+        fetch('APIDuel.php', { method: 'POST', body: donnees })
+            .then(response => response.json())
+            .then(data => {
+                if (data.erreur) {
+                    info.textContent = 'Sauvegarde impossible : recharge la page.';
+                    return;
+                }
+                choix.dataset.stuff = JSON.stringify(donnees.getAll('objets[]')); // pour le resélectionner sans recharger
+                info.textContent = donnees.getAll('objets[]').length
+                    ? `Stuff sauvegardé pour ${choix.dataset.nom}.`
+                    : `Stuff de ${choix.dataset.nom} effacé.`;
+            })
+            .catch(() => { info.textContent = 'Sauvegarde impossible : vérifie ta connexion.'; });
+    });
 
     // Recherche : on cache les champions dont le nom ne commence pas par la saisie (même règle que api.html)
     const simplifier = texte => texte.toLowerCase().normalize('NFD').replace(/[^a-z0-9]/g, '');
