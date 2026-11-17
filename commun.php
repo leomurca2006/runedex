@@ -433,3 +433,29 @@ function simulerDuel($joueur, $bot) {
     $victoire = $pv[1] <= 0 || ($pv[0] > 0 && $pv[0] / $joueur['pv'] > $pv[1] / $bot['pv']);
     return [$victoire, $coups];
 }
+
+// Profil : un champion possédé comme avatar + une vitrine de 3 cartes, choisis dans compte.php,
+// affichés par carte-profil.php (page Compte et profil public dans joueurs.php).
+const VITRINE_MAX = 3;
+ajouterColonne($pdo, 'comptes', 'avatar', "TEXT NOT NULL DEFAULT ''");   // clé du champion ('' = pas d'avatar)
+ajouterColonne($pdo, 'comptes', 'vitrine', "TEXT NOT NULL DEFAULT '[]'"); // clés des champions en vitrine (JSON)
+
+// Tout ce qu'affiche la carte de profil. Avatar et vitrine ne gardent que les champions encore possédés
+// (le joueur a pu les recycler ou les échanger depuis). Renvoie null si le compte n'existe pas.
+function profilJoueur($pdo, $id) {
+    $req = $pdo->prepare("SELECT pseudo, avatar, vitrine, palier_duel,
+        (SELECT COUNT(*) FROM cartes WHERE compte_id = c.id) AS champions,
+        (SELECT COUNT(*) FROM skins_debloques WHERE compte_id = c.id) AS skins,
+        (SELECT COUNT(*) FROM objets_debloques WHERE compte_id = c.id AND type = 'objets') AS objets,
+        (SELECT COUNT(*) FROM defis_reussis WHERE compte_id = c.id) AS defis
+        FROM comptes c WHERE id = ?");
+    $req->execute([$id]);
+    $profil = $req->fetch();
+    if (!$profil) return null;
+    $req = $pdo->prepare('SELECT champion, skin, etoiles FROM cartes WHERE compte_id = ?');
+    $req->execute([$id]);
+    $cartes = array_column($req->fetchAll(), null, 'champion'); // ['Ahri' => ['champion' => 'Ahri', 'skin' => 0, 'etoiles' => 3], ...]
+    $profil['avatar'] = $cartes[$profil['avatar']] ?? null;
+    $profil['vitrine'] = array_values(array_filter(array_map(fn($cle) => $cartes[$cle] ?? null, json_decode($profil['vitrine'], true) ?: [])));
+    return $profil;
+}

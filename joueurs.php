@@ -28,6 +28,7 @@ foreach ($joueurs as $rang => $joueur) {
     }
 }
 if ($profil) {
+    $profil = profilJoueur($pdo, $id) + ['rang' => $profil['rang']]; // avatar, vitrine... pour carte-profil.php
     $req = $pdo->prepare('SELECT champion, nombre, skin, etoiles FROM cartes WHERE compte_id = ? ORDER BY champion');
     $req->execute([$id]);
     $cartes = $req->fetchAll();
@@ -69,18 +70,11 @@ if ($profil) {
     <main class="page-echanges">
     <?php if ($profil): ?>
         <a class="lien-retour" href="joueurs.php"><i class="material-icons" aria-hidden="true">arrow_back</i>Tous les joueurs</a>
-        <div class="album-tete">
-            <h1><?= h($profil['pseudo']) ?></h1>
-            <div class="stats panneau">
-                <p class="stat"><strong>#<?= $profil['rang'] ?></strong><span>classement</span></p>
-                <p class="stat"><strong><?= $profil['champions'] ?></strong><span>champions</span></p>
-                <p class="stat"><strong><?= $profil['skins'] ?></strong><span>skins</span></p>
-                <p class="stat"><strong><?= $profil['objets'] ?></strong><span>objets complets</span></p>
-            </div>
-        </div>
+        <?php include 'carte-profil.php'; ?>
         <?php if ($id !== $moi): ?>
             <p><a class="bouton bouton-or bouton-lien" href="echanges.php?avec=<?= $id ?>">Proposer un échange</a></p>
         <?php endif; ?>
+        <h2>Collection</h2>
         <?php if (!$cartes): ?>
             <p class="message">Ce joueur n'a pas encore de carte.</p>
         <?php endif; ?>

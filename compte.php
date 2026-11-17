@@ -12,6 +12,22 @@ if ($action === 'deconnexion') {
     exit;
 }
 
+// Profil : avatar + vitrine. On ne garde que des champions possédés (le formulaire peut être modifié à la main).
+if ($action === 'profil' && isset($_SESSION['id'])) {
+    $req = $pdo->prepare('SELECT champion FROM cartes WHERE compte_id = ?');
+    $req->execute([$_SESSION['id']]);
+    $possedes = $req->fetchAll(PDO::FETCH_COLUMN);
+    $avatar = in_array($_POST['avatar'] ?? '', $possedes, true) ? $_POST['avatar'] : '';
+    $vitrine = array_filter((array) ($_POST['vitrine'] ?? []), fn($cle) => in_array($cle, $possedes, true));
+    $vitrine = array_slice(array_values(array_unique($vitrine)), 0, VITRINE_MAX);
+    $pdo->prepare('UPDATE comptes SET avatar = ?, vitrine = ? WHERE id = ?')->execute([$avatar, json_encode($vitrine), $_SESSION['id']]);
+    $_SESSION['message'] = 'Profil enregistré !';
+    header('Location: compte.php'); // on recharge : F5 ne renvoie pas le formulaire
+    exit;
+}
+$message = $_SESSION['message'] ?? $message;
+unset($_SESSION['message']);
+
 if ($action === 'inscription') {
     if (mb_strlen($pseudo) < 3 || mb_strlen($pseudo) > 20) {
         $message = 'Le pseudo doit faire entre 3 et 20 caractères.';
@@ -43,6 +59,25 @@ if ($action === 'connexion') {
         exit;
     }
     $message = 'Pseudo ou mot de passe incorrect.';
+}
+
+if (isset($_SESSION['id'])) {
+    $profil = profilJoueur($pdo, $_SESSION['id']);
+    $champions = listeChampions() ?? [];
+    $req = $pdo->prepare('SELECT champion, etoiles FROM cartes WHERE compte_id = ?');
+    $req->execute([$_SESSION['id']]);
+    $mesCartes = $req->fetchAll(PDO::FETCH_KEY_PAIR); // ['Ahri' => 3, ...]
+    $nomChampion = fn($cle) => $champions[$cle]['name'] ?? $cle;
+    uksort($mesCartes, fn($a, $b) => strcasecmp($nomChampion($a), $nomChampion($b))); // par nom affiché
+    $vitrineActuelle = array_column($profil['vitrine'], 'champion');
+}
+
+// Liste déroulante de mes champions (avec leurs étoiles), $choisi = celui sélectionné
+function optionsChampions($mesCartes, $nomChampion, $choisi) {
+    foreach ($mesCartes as $cle => $etoiles) {
+        echo '<option value="' . htmlspecialchars($cle) . '"' . ($cle === $choisi ? ' selected' : '') . '>'
+            . htmlspecialchars($nomChampion($cle)) . ' ' . str_repeat('★', $etoiles) . '</option>';
+    }
 }
 ?><!DOCTYPE html>
 <html lang="fr">
@@ -82,14 +117,36 @@ if ($action === 'connexion') {
             <p class="message" role="alert"><?= htmlspecialchars($message) ?></p>
         <?php endif; ?>
 
-        <div class="formulaires">
         <?php if (isset($_SESSION['id'])): ?>
-            <form class="panneau" method="post">
-                <h1>Salut <?= htmlspecialchars($_SESSION['pseudo']) ?></h1>
-                <p>Tu es connecté. Ta collection est sauvegardée sur ton compte.</p>
-                <button class="bouton" name="action" value="deconnexion">Se déconnecter</button>
-            </form>
+        <div class="page-profil">
+            <?php include 'carte-profil.php'; ?>
+            <div>
+                <form class="panneau formulaire-profil" method="post">
+                    <h2>Personnaliser</h2>
+                    <?php if (!$mesCartes): ?>
+                        <p class="info-expedition"><a href="booster.html">Ouvre un booster</a> pour avoir des champions à mettre en avatar et en vitrine.</p>
+                    <?php endif; ?>
+                    <label for="avatar">Avatar</label>
+                    <select class="champ" id="avatar" name="avatar">
+                        <option value="">Aucun (initiale du pseudo)</option>
+                        <?php optionsChampions($mesCartes, $nomChampion, $profil['avatar']['champion'] ?? ''); ?>
+                    </select>
+                    <?php for ($i = 0; $i < VITRINE_MAX; $i++): ?>
+                        <label for="vitrine<?= $i ?>">Vitrine : carte <?= $i + 1 ?></label>
+                        <select class="champ" id="vitrine<?= $i ?>" name="vitrine[]">
+                            <option value="">Vide</option>
+                            <?php optionsChampions($mesCartes, $nomChampion, $vitrineActuelle[$i] ?? ''); ?>
+                        </select>
+                    <?php endfor; ?>
+                    <button class="bouton bouton-or" name="action" value="profil">Enregistrer</button>
+                </form>
+                <form method="post">
+                    <button class="bouton bouton-deconnexion" name="action" value="deconnexion">Se déconnecter</button>
+                </form>
+            </div>
+        </div>
         <?php else: ?>
+        <div class="formulaires">
             <form class="panneau" method="post">
                 <h2>Connexion</h2>
                 <label for="pseudoConnexion">Pseudo</label>
@@ -106,8 +163,8 @@ if ($action === 'connexion') {
                 <input class="champ" id="mdpInscription" type="password" name="mdp" required minlength="6" autocomplete="new-password">
                 <button class="bouton" name="action" value="inscription">Créer mon compte</button>
             </form>
-        <?php endif; ?>
         </div>
+        <?php endif; ?>
     </main>
     <script src="main.js"></script>
 </body>

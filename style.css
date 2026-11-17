@@ -831,6 +831,44 @@ main { max-width: 1180px; margin: 0 auto; padding: 32px 16px 64px; }
 .formulaires label { font-weight: 700; margin-top: 6px; }
 .formulaires .bouton { margin-top: 14px; }
 
+/* ---------- Carte de profil (page Compte et profil public dans Joueurs) ---------- */
+.page-profil { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 24px; align-items: start; }
+.formulaire-profil { display: flex; flex-direction: column; gap: 8px; }
+.formulaire-profil h2 { margin-top: 0; }
+.formulaire-profil label { font-weight: 700; margin-top: 6px; }
+.formulaire-profil .bouton { margin-top: 14px; }
+.bouton-deconnexion { width: 100%; margin-top: 16px; background: none; color: var(--doux); border: 1px solid var(--trait); box-shadow: none; }
+.carte-profil { margin-bottom: 24px; }
+.page-profil .carte-profil { margin-bottom: 0; }
+.profil-tete { display: flex; align-items: center; gap: 18px; }
+.profil-tete h1 { margin: 0; overflow-wrap: anywhere; }
+.profil-rang { margin: 4px 0 0; color: var(--doux); font-weight: 700; }
+.avatar {
+    flex: none;
+    width: 88px;
+    height: 88px;
+    border-radius: 50%;
+    border: 3px solid var(--or);
+    box-shadow: 0 0 0 5px var(--lueur);
+    object-fit: cover;
+    object-position: center 18%; /* le visage est en haut des images "loading" */
+    background: var(--surface-2);
+}
+.avatar-vide { display: grid; place-items: center; font: 400 2.2rem var(--titre); color: var(--or); }
+.profil-stats { flex-wrap: wrap; row-gap: 12px; margin: 20px 0; border-top: 1px solid var(--trait); border-bottom: 1px solid var(--trait); }
+.profil-stats .stat:first-child { padding-left: 0; }
+.vitrine { display: grid; grid-template-columns: repeat(3, minmax(0, 180px)); gap: 18px; }
+.vitrine .carte { width: auto; }
+@media (max-width: 860px) {
+    .page-profil { grid-template-columns: 1fr; }
+}
+@media (max-width: 560px) {
+    .vitrine { gap: 8px; }
+    .vitrine .carte h4 { font-size: .8rem; }
+    .vitrine .carte p { display: none; }
+    .profil-stats .stat { padding: 0 12px; }
+}
+
 /* ---------- Page Recherche ---------- */
 .recherche { display: flex; gap: 10px; max-width: 600px; margin: 0 auto 12px; }
 .resultats-info { max-width: 600px; margin: 0 auto 16px; color: var(--doux); font-size: .9rem; }
