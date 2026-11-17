@@ -30,7 +30,7 @@ function imageCarte(carte) {
 
 function htmlCarte(carte) {
     return `
-        <div class="carte${carte.type === 'objet' ? ' carte-objet' : ''}">
+        <div class="carte${carte.type === 'objet' ? ' carte-objet' : ''}${carte.holo ? ' carte-holo' : ''}">
             <img src="${imageCarte(carte)}" alt="${carte.nom}" width="154" height="280">
             <h4>${carte.nom}</h4>
             <p>${carte.titre}</p>

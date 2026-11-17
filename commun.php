@@ -74,10 +74,13 @@ ajouterColonne($pdo, 'comptes', 'rubis', 'INTEGER NOT NULL DEFAULT 0');
 ajouterColonne($pdo, 'comptes', 'composants_achetes', 'INTEGER NOT NULL DEFAULT 0'); // total de boosters composants achetés
 ajouterColonne($pdo, 'comptes', 'boosters_objets', 'INTEGER NOT NULL DEFAULT 0');    // boosters d'objets complets à ouvrir
 
+// Exemplaires d'un champion protégés du recyclage des doublons : 1 normal + 1 par niveau holo (les holos sont à part)
+const GARDE_CHAMPIONS = 'holo + 1';
+
 // Rubis, boosters spéciaux et nombre d'exemplaires en trop (les doublons qu'on peut recycler) par type
 function etatRubis($pdo, $id) {
     $req = $pdo->prepare("SELECT rubis, composants_achetes, boosters_objets,
-        (SELECT COALESCE(SUM(nombre - 1), 0) FROM cartes WHERE compte_id = comptes.id) AS champions,
+        (SELECT COALESCE(SUM(MAX(0, nombre - (" . GARDE_CHAMPIONS . "))), 0) FROM cartes WHERE compte_id = comptes.id) AS champions,
         (SELECT COALESCE(SUM(nombre - 1), 0) FROM objets_debloques WHERE compte_id = comptes.id AND type = 'composants') AS composants,
         (SELECT COALESCE(SUM(nombre - 1), 0) FROM objets_debloques WHERE compte_id = comptes.id AND type = 'objets') AS objets
         FROM comptes WHERE id = ?");
@@ -110,20 +113,21 @@ function recyclerCarte($pdo, $id, $cle) {
     return RUBIS_PAR_CARTE;
 }
 
-// Recycle tous les doublons d'un type (champions, composants ou objets) en gardant 1 exemplaire de chaque.
-// Renvoie les rubis gagnés.
+// Recycle tous les doublons d'un type (champions, composants ou objets) en gardant 1 exemplaire de chaque
+// (et, pour les champions, les exemplaires holo en plus). Renvoie les rubis gagnés.
 function recyclerDoublons($pdo, $id, $type = 'champions') {
     if (!is_string($type) || !isset(RUBIS_RECYCLAGE[$type])) return 0; // is_string : un tableau envoyé à la main ferait planter isset
     // les champions sont dans "cartes", les composants et objets dans "objets_debloques" (colonne type)
-    [$table, $filtre, $valeurs] = $type === 'champions'
-        ? ['cartes', '', [$id]]
-        : ['objets_debloques', 'AND type = ?', [$id, $type]];
+    // $garde = combien d'exemplaires on garde (expression SQL)
+    [$table, $filtre, $valeurs, $garde] = $type === 'champions'
+        ? ['cartes', '', [$id], GARDE_CHAMPIONS]
+        : ['objets_debloques', 'AND type = ?', [$id, $type], '1'];
     $pdo->beginTransaction();
-    $req = $pdo->prepare("SELECT COALESCE(SUM(nombre - 1), 0) FROM $table WHERE compte_id = ? $filtre AND nombre > 1");
+    $req = $pdo->prepare("SELECT COALESCE(SUM(nombre - ($garde)), 0) FROM $table WHERE compte_id = ? $filtre AND nombre > $garde");
     $req->execute($valeurs);
     $recycles = (int) $req->fetchColumn();
     $gain = $recycles * RUBIS_RECYCLAGE[$type];
-    $pdo->prepare("UPDATE $table SET nombre = 1 WHERE compte_id = ? $filtre AND nombre > 1")->execute($valeurs);
+    $pdo->prepare("UPDATE $table SET nombre = $garde WHERE compte_id = ? $filtre AND nombre > $garde")->execute($valeurs);
     $pdo->prepare('UPDATE comptes SET rubis = rubis + ? WHERE id = ?')->execute([$gain, $id]);
     avancerMission($pdo, $id, 'recyclage', $recycles);
     $pdo->commit();
@@ -200,24 +204,40 @@ $pdo->exec('CREATE TABLE IF NOT EXISTS skins_debloques (
 )');
 ajouterColonne($pdo, 'cartes', 'skin', 'INTEGER NOT NULL DEFAULT 0'); // skin équipé : celui affiché sur la carte dans la collection
 ajouterColonne($pdo, 'cartes', 'favori', 'INTEGER NOT NULL DEFAULT 0'); // 1 = carte en favori (affichée en premier dans la collection)
+// "nombre" = tous les exemplaires, dont "holo" exemplaires holo (0 = pas de version holo ; toujours holo <= nombre)
+ajouterColonne($pdo, 'cartes', 'holo', 'INTEGER NOT NULL DEFAULT 0');
 
 // Étoiles : on fusionne des doublons pour faire monter un champion de 1 à 5 étoiles.
 // Passer de e à e+1 étoiles coûte 2^(e-1) doublons : 1, 2, 4 puis 8 (15 en tout).
-// Chaque étoile au-dessus de 1 donne +10 % de stats en duel.
+// Deux niveaux séparés :
+//  - étoiles normales ("etoiles") : avec des doublons normaux, +10 % de stats en duel par étoile au-dessus de 1 ;
+//  - étoiles holo ("etoiles_holo") : uniquement avec des doublons holo, +50 % par étoile (1 étoile = +50 %, 5 = +250 %).
 const ETOILES_MAX = 5;
 const BONUS_ETOILE = 10;
+const BONUS_HOLO = 50;
 ajouterColonne($pdo, 'cartes', 'etoiles', 'INTEGER NOT NULL DEFAULT 1');
+ajouterColonne($pdo, 'cartes', 'etoiles_holo', 'INTEGER NOT NULL DEFAULT 1');
+
+// Bonus de stats d'une carte en duel, en % : étoiles normales + étoiles holo, additionnés (ex. 5 étoiles + 2 étoiles holo = 40 + 100)
+function bonusCarte($carte) {
+    return ($carte['etoiles'] - 1) * BONUS_ETOILE + ($carte['holo'] > 0 ? $carte['etoiles_holo'] * BONUS_HOLO : 0);
+}
 
 function coutEtoile($etoiles) {
     return 2 ** ($etoiles - 1);
 }
 
-// +1 étoile en consommant des doublons (on garde toujours 1 exemplaire) ; renvoie false s'il n'y en a pas assez.
+// +1 étoile en consommant des doublons ; renvoie false s'il n'y en a pas assez.
+// $holo = false : étoiles normales, payées avec les exemplaires normaux (on en garde toujours 1, les holos ne sont pas touchés).
+// $holo = true  : étoiles holo, payées uniquement avec des exemplaires holo (on garde toujours 1 holo).
 // Une seule requête : deux clics en même temps ne dépensent pas deux fois les mêmes doublons.
-// En SQL, 1 << (etoiles - 1) = coutEtoile(etoiles).
-function ameliorerCarte($pdo, $compteId, $cle) {
-    $req = $pdo->prepare('UPDATE cartes SET nombre = nombre - (1 << (etoiles - 1)), etoiles = etoiles + 1
-        WHERE compte_id = ? AND champion = ? AND etoiles < ? AND nombre - 1 >= (1 << (etoiles - 1))');
+// En SQL, 1 << (e - 1) = coutEtoile(e).
+function ameliorerCarte($pdo, $compteId, $cle, $holo = false) {
+    $req = $pdo->prepare($holo
+        ? 'UPDATE cartes SET nombre = nombre - (1 << (etoiles_holo - 1)), holo = holo - (1 << (etoiles_holo - 1)), etoiles_holo = etoiles_holo + 1
+            WHERE compte_id = ? AND champion = ? AND etoiles_holo < ? AND holo - 1 >= (1 << (etoiles_holo - 1))'
+        : 'UPDATE cartes SET nombre = nombre - (1 << (etoiles - 1)), etoiles = etoiles + 1
+            WHERE compte_id = ? AND champion = ? AND etoiles < ? AND nombre - holo - 1 >= (1 << (etoiles - 1))');
     $req->execute([$compteId, $cle, ETOILES_MAX]);
     if ($req->rowCount() !== 1) return false;
     avancerMission($pdo, $compteId, 'etoile');
@@ -284,15 +304,17 @@ $pdo->exec('CREATE TABLE IF NOT EXISTS defis_reussis (
     PRIMARY KEY (compte_id, defi)
 )');
 
-// Ajoute 1 exemplaire d'un champion à la collection d'un joueur
-function ajouterCarte($pdo, $compteId, $cle) {
-    $pdo->prepare('INSERT INTO cartes (compte_id, champion) VALUES (?, ?)
-        ON CONFLICT (compte_id, champion) DO UPDATE SET nombre = nombre + 1')->execute([$compteId, $cle]);
+// Ajoute 1 exemplaire d'un champion à la collection d'un joueur.
+// $holo = carte sortie d'un booster holographique : c'est un exemplaire holo (album holo, étoiles holo).
+function ajouterCarte($pdo, $compteId, $cle, $holo = false) {
+    $pdo->prepare('INSERT INTO cartes (compte_id, champion, holo) VALUES (?, ?, ?)
+        ON CONFLICT (compte_id, champion) DO UPDATE SET nombre = nombre + 1, holo = holo + excluded.holo')->execute([$compteId, $cle, (int) $holo]);
 }
 
-// Retire 1 exemplaire ; renvoie false si le joueur ne l'a pas (ou plus), ou si c'est le dernier et qu'il est en expédition
+// Retire 1 exemplaire ; renvoie false si le joueur ne l'a pas (ou plus), ou si c'est le dernier et qu'il est en expédition.
+// Un exemplaire normal part en premier : un holo n'est retiré que s'il ne reste que des holos (holo = MIN(holo, nombre restant)).
 function retirerCarte($pdo, $compteId, $cle) {
-    $req = $pdo->prepare('UPDATE cartes SET nombre = nombre - 1 WHERE compte_id = ? AND champion = ? AND nombre >= 1
+    $req = $pdo->prepare('UPDATE cartes SET nombre = nombre - 1, holo = MIN(holo, nombre - 1) WHERE compte_id = ? AND champion = ? AND nombre >= 1
         AND (nombre > 1 OR NOT EXISTS (SELECT 1 FROM expeditions e WHERE e.compte_id = cartes.compte_id AND e.champion = cartes.champion))');
     $req->execute([$compteId, $cle]);
     if ($req->rowCount() === 0) return false;
@@ -471,9 +493,9 @@ function profilJoueur($pdo, $id) {
     $req->execute([$id]);
     $profil = $req->fetch();
     if (!$profil) return null;
-    $req = $pdo->prepare('SELECT champion, skin, etoiles FROM cartes WHERE compte_id = ?');
+    $req = $pdo->prepare('SELECT champion, skin, etoiles, holo FROM cartes WHERE compte_id = ?');
     $req->execute([$id]);
-    $cartes = array_column($req->fetchAll(), null, 'champion'); // ['Ahri' => ['champion' => 'Ahri', 'skin' => 0, 'etoiles' => 3], ...]
+    $cartes = array_column($req->fetchAll(), null, 'champion'); // ['Ahri' => ['champion' => 'Ahri', 'skin' => 0, 'etoiles' => 3, 'holo' => 1], ...]
     $profil['avatar'] = $cartes[$profil['avatar']] ?? null;
     $profil['vitrine'] = array_values(array_filter(array_map(fn($cle) => $cartes[$cle] ?? null, json_decode($profil['vitrine'], true) ?: [])));
     return $profil;

@@ -90,6 +90,10 @@ $req = $type === 'champions'
     : $pdo->prepare('SELECT objet FROM objets_debloques WHERE compte_id = ?');
 $req->execute([$id]);
 $possedes = array_flip($req->fetchAll(PDO::FETCH_COLUMN));
+// Versions holo déjà débloquées, pour l'étiquette "Nouveau holo"
+$req = $pdo->prepare('SELECT champion FROM cartes WHERE compte_id = ? AND holo > 0');
+$req->execute([$id]);
+$holosPossedes = array_flip($req->fetchAll(PDO::FETCH_COLUMN));
 
 $boosters = [];
 $holos = []; // true/false pour chaque booster
@@ -104,8 +108,10 @@ for ($b = 0; $b < $nombre; $b++) {
     foreach ($cles as $cle) {
         $cle = (string) $cle; // PHP transforme la clé "3031" en nombre : on la remet en texte
         if ($type === 'champions') {
-            ajouterCarte($pdo, $id, $cle);
-            $carte = ['cle' => $cle, 'nom' => $champions[$cle]['name'], 'titre' => $champions[$cle]['title']];
+            ajouterCarte($pdo, $id, $cle, $holo); // booster holo : chaque carte est un exemplaire holo
+            $carte = ['cle' => $cle, 'nom' => $champions[$cle]['name'], 'titre' => $champions[$cle]['title'],
+                'holo' => $holo, 'nouveauHolo' => $holo && !isset($holosPossedes[$cle])];
+            if ($holo) $holosPossedes[$cle] = true;
         } else {
             ajouterObjet($pdo, $id, $cle, $type);
             $objet = $tirables[$cle];

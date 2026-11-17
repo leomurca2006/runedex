@@ -27,7 +27,7 @@ if ($riotOk) {
     $bot = botDuPalier($moi, $palier, $champions, $objets);
 
     // Mes champions (avec leur skin équipé) et mes objets, avec de quoi calculer l'aperçu des stats en JS
-    $req = $pdo->prepare('SELECT champion, skin, etoiles, stuff FROM cartes WHERE compte_id = ? ORDER BY champion');
+    $req = $pdo->prepare('SELECT champion, skin, etoiles, stuff, holo, etoiles_holo FROM cartes WHERE compte_id = ? ORDER BY champion');
     $req->execute([$moi]);
     $mesCartes = array_filter($req->fetchAll(), fn($carte) => isset($champions[$carte['champion']]));
     $req = $pdo->prepare('SELECT objet, nombre FROM objets_debloques WHERE compte_id = ?');
@@ -133,11 +133,12 @@ $iconeObjet = fn($cle) => 'https://ddragon.leagueoflegends.com/cdn/' . VERSION .
                         <label class="choix-carte" data-nom="<?= h($champions[$cle]['name']) ?>"><input type="radio" name="champion" value="<?= h($cle) ?>" required
                             data-nom="<?= h($champions[$cle]['name']) ?>" data-image="<?= h($image($cle, $carte['skin'])) ?>"
                             data-stats="<?= h(json_encode(statsChampion($champions[$cle]))) ?>"
-                            data-bonus-etoiles="<?= ($carte['etoiles'] - 1) * BONUS_ETOILE ?>"
+                            data-bonus-carte="<?= bonusCarte($carte) ?>"
                             data-stuff="<?= h(json_encode($stuff)) ?>">
                             <img src="<?= h($image($cle, $carte['skin'])) ?>" alt="" width="77" height="140" loading="lazy">
                             <span class="choix-nom"><?= h($champions[$cle]['name']) ?></span>
-                            <span class="choix-etoiles" role="img" aria-label="<?= $carte['etoiles'] ?> sur <?= ETOILES_MAX ?> étoiles"><?= str_repeat('★', $carte['etoiles']) ?></span></label>
+                            <span class="choix-etoiles" role="img" aria-label="<?= $carte['etoiles'] ?> sur <?= ETOILES_MAX ?> étoiles"><?= str_repeat('★', $carte['etoiles']) ?></span>
+                            <?php if ($carte['holo']): ?><span class="niveau-holo">Holo <?= str_repeat('★', $carte['etoiles_holo']) ?> +<?= $carte['etoiles_holo'] * BONUS_HOLO ?> %</span><?php endif; ?></label>
                     <?php endforeach; ?>
                 </div>
             </fieldset>

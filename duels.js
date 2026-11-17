@@ -42,9 +42,9 @@ if (formDuel) {
             const bonus = JSON.parse(caseObjet.dataset.bonus);
             for (const cle in bonus) stats[cle] += cle === 'vitesse' ? stats.vitesseBase * bonus[cle] : bonus[cle];
         });
-        // Bonus des étoiles (+10 % par étoile au-dessus de 1), comme le $bonus de statsCombat()
-        const bonusEtoiles = Number(choix.dataset.bonusEtoiles);
-        for (const cle of ['pv', 'ad', 'pm', 'armure', 'rm']) stats[cle] *= 1 + bonusEtoiles / 100;
+        // Bonus de la carte (étoiles + niveaux holo, voir bonusCarte() dans commun.php), comme le $bonus de statsCombat()
+        const bonusCarte = Number(choix.dataset.bonusCarte);
+        for (const cle of ['pv', 'ad', 'pm', 'armure', 'rm']) stats[cle] *= 1 + bonusCarte / 100;
         stats.vitesse = Math.min(2.5, stats.vitesse);
         stats.critique = Math.min(1, stats.critique);
         return stats;

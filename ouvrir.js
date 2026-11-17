@@ -391,7 +391,8 @@ function afficherRecap() {
                         style="--r:${decalage * 7}deg; --y:${Math.abs(decalage) * 10}px; --n:${Math.min(n++, 30)}"
                         aria-label="Voir la fiche de ${carte.nom}">
                         ${htmlCarte(carte)}
-                        ${carte.nouveau ? '<span class="etiquette etiquette-nouveau">Nouveau</span>' : ''}
+                        ${carte.nouveau ? '<span class="etiquette etiquette-nouveau">Nouveau</span>'
+                            : carte.nouveauHolo ? '<span class="etiquette etiquette-nouveau">Nouveau holo</span>' : ''}
                     </button>`;
             }).join('')}
         </div>`).join('');
@@ -411,7 +412,7 @@ function suggererRecyclage() {
     const gain = doublons * etat.rubisRecyclage[typePaquet];
     $('suggestionRecyclage').hidden = doublons === 0;
     $('texteRecyclage').innerHTML = `Tu as <strong>${doublons} ${NOMS_TYPES[typePaquet]}${doublons > 1 ? 's' : ''} en double</strong>.
-        Recycle-les pour gagner <strong>${gain} rubis</strong> (${etat.rubisRecyclage[typePaquet]} par exemplaire, tu gardes 1 exemplaire de chaque).
+        Recycle-les pour gagner <strong>${gain} rubis</strong> (${etat.rubisRecyclage[typePaquet]} par exemplaire, tu gardes 1 exemplaire de chaque${typePaquet === 'champions' ? ' et tes holos' : ''}).
         Tu as ${etat.rubis} rubis.`;
 }
 

@@ -20,10 +20,10 @@ if (!is_array($choix) || count($choix) > OBJETS_MAX_DUEL) erreur(400, 'objets');
 $choix = array_map('strval', $choix);
 if (count(array_unique($choix)) !== count($choix)) erreur(400, 'objets'); // chaque objet une seule fois
 
-$req = $pdo->prepare('SELECT etoiles FROM cartes WHERE compte_id = ? AND champion = ?');
+$req = $pdo->prepare('SELECT etoiles, holo, etoiles_holo FROM cartes WHERE compte_id = ? AND champion = ?');
 $req->execute([$id, $champion]);
-$etoiles = $req->fetchColumn();
-if ($etoiles === false) erreur(400, 'champion');
+$carte = $req->fetch();
+if (!$carte) erreur(400, 'champion');
 $req = $pdo->prepare('SELECT objet FROM objets_debloques WHERE compte_id = ?');
 $req->execute([$id]);
 if (array_diff($choix, $req->fetchAll(PDO::FETCH_COLUMN))) erreur(400, 'objets');
@@ -43,7 +43,7 @@ $req = $pdo->prepare('SELECT palier_duel FROM comptes WHERE id = ?');
 $req->execute([$id]);
 $palier = (int) $req->fetchColumn();
 $bot = botDuPalier($id, $palier, $champions, $objets);
-$stats = statsCombat($champions[$champion], array_map(fn($objet) => $objets[$objet], $choix), ($etoiles - 1) * BONUS_ETOILE);
+$stats = statsCombat($champions[$champion], array_map(fn($objet) => $objets[$objet], $choix), bonusCarte($carte)); // étoiles + holo
 [$victoire, $coups] = simulerDuel($stats, $bot['stats']);
 avancerMission($pdo, $id, 'duel'); // victoire ou défaite : la mission compte les duels joués
 

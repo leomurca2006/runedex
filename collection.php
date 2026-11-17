@@ -7,6 +7,8 @@ if (!isset($_SESSION['id'])) {
 }
 
 $action = $_POST['action'] ?? '';
+// Après une action on revient sur le même album (normal ou holo)
+$retour = 'collection.php' . (str_contains($_SERVER['HTTP_REFERER'] ?? '', 'album=holo') ? '?album=holo' : '');
 
 // Équiper un skin : seulement le skin de base (0) ou un skin débloqué
 if ($action === 'skin') {
@@ -18,7 +20,7 @@ if ($action === 'skin') {
     $req->bindValue('cle', $cle);
     $req->execute();
     $_SESSION['message'] = $req->rowCount() ? 'Skin équipé !' : 'Tu n\'as pas débloqué ce skin.';
-    header('Location: collection.php#carte-' . urlencode($cle));
+    header('Location: ' . $retour . '#carte-' . urlencode($cle));
     exit;
 }
 
@@ -26,15 +28,19 @@ if ($action === 'skin') {
 if ($action === 'favori') {
     $cle = (string) ($_POST['cle'] ?? '');
     $pdo->prepare('UPDATE cartes SET favori = 1 - favori WHERE compte_id = ? AND champion = ?')->execute([$_SESSION['id'], $cle]);
-    header('Location: collection.php#carte-' . urlencode($cle));
+    header('Location: ' . $retour . '#carte-' . urlencode($cle));
     exit;
 }
 
 // Étoile : on fusionne des doublons pour faire monter le champion
-if ($action === 'etoile') {
+// (etoile_holo : étoiles holo, payées uniquement avec des exemplaires holo)
+if ($action === 'etoile' || $action === 'etoile_holo') {
     $cle = (string) ($_POST['cle'] ?? '');
-    $_SESSION['message'] = ameliorerCarte($pdo, $_SESSION['id'], $cle) ? 'Une étoile de plus !' : 'Pas assez de doublons.';
-    header('Location: collection.php#carte-' . urlencode($cle));
+    $holo = $action === 'etoile_holo';
+    $_SESSION['message'] = ameliorerCarte($pdo, $_SESSION['id'], $cle, $holo)
+        ? ($holo ? 'Une étoile holo de plus !' : 'Une étoile de plus !')
+        : ($holo ? 'Pas assez de doublons holo.' : 'Pas assez de doublons.');
+    header('Location: ' . $retour . '#carte-' . urlencode($cle));
     exit;
 }
 
@@ -44,20 +50,23 @@ if ($action === 'recycler' || $action === 'doublons') {
         ? recyclerDoublons($pdo, $_SESSION['id'], $_POST['type'] ?? 'champions')
         : recyclerCarte($pdo, $_SESSION['id'], $_POST['cle'] ?? '');
     $_SESSION['message'] = $gain ? "+$gain rubis !" : 'Rien à recycler.';
-    header('Location: collection.php' . ($action === 'recycler' ? '#carte-' . urlencode($_POST['cle'] ?? '') : ''));
+    header('Location: ' . $retour . ($action === 'recycler' ? '#carte-' . urlencode($_POST['cle'] ?? '') : ''));
     exit;
 }
 $message = $_SESSION['message'] ?? '';
 unset($_SESSION['message']);
 $rubis = etatRubis($pdo, $_SESSION['id']);
 
-$req = $pdo->prepare('SELECT champion, nombre, skin, favori, etoiles FROM cartes WHERE compte_id = ? ORDER BY champion');
+$req = $pdo->prepare('SELECT champion, nombre, skin, favori, etoiles, holo, etoiles_holo FROM cartes WHERE compte_id = ? ORDER BY champion');
 $req->execute([$_SESSION['id']]);
 $lignes = $req->fetchAll();
 $possedes = array_column($lignes, 'nombre', 'champion'); // ['Ahri' => 2, ...]
 $skinsEquipes = array_column($lignes, 'skin', 'champion'); // ['Ahri' => 0, ...]
 $favoris = array_filter(array_column($lignes, 'favori', 'champion')); // ['Ahri' => 1, ...] (seulement les favoris)
 $etoiles = array_column($lignes, 'etoiles', 'champion'); // ['Ahri' => 3, ...]
+$holos = array_filter(array_column($lignes, 'holo', 'champion')); // exemplaires holo : ['Ahri' => 3, ...] (seulement ceux qui en ont)
+$etoilesHolo = array_column($lignes, 'etoiles_holo', 'champion'); // ['Ahri' => 2, ...]
+$vueHolo = ($_GET['album'] ?? '') === 'holo'; // collection.php?album=holo : l'album holo
 // Skins débloqués : ['Ahri' => [1, 4], ...]
 $mesSkins = [];
 $req = $pdo->prepare('SELECT champion, num FROM skins_debloques WHERE compte_id = ? ORDER BY num');
@@ -137,7 +146,7 @@ $liste = array_merge(array_intersect_key($liste, $favoris), $liste);
             <form method="post" class="suggestion-recyclage panneau" id="recyclage">
                 <i class="material-icons rubis-icone" aria-hidden="true">diamond</i>
                 <fieldset class="choix-recyclage">
-                    <legend>Tu as des doublons. Que veux-tu recycler ? (tu gardes 1 exemplaire de chaque)</legend>
+                    <legend>Tu as des doublons. Que veux-tu recycler ? (tu gardes 1 exemplaire de chaque, et tes exemplaires holo ne sont jamais recyclés)</legend>
                     <?php foreach ($nomsTypes as $type => $nomType): $n = $parType[$type]; ?>
                         <label>
                             <input type="radio" name="type" value="<?= $type ?>"<?= $type === $typeChoisi ? ' checked' : '' ?><?= $n ? '' : ' disabled' ?>>
@@ -151,6 +160,13 @@ $liste = array_merge(array_intersect_key($liste, $favoris), $liste);
         <?php if (!$possedes): ?>
             <p class="message">Ton album est vide. <a href="booster.html">Ouvre un booster</a> pour obtenir tes 5 premiers champions.</p>
         <?php endif; ?>
+        <nav class="onglets-album" aria-label="Albums">
+            <a href="collection.php"<?= $vueHolo ? '' : ' aria-current="page"' ?>>Album <small><?= count($possedes) ?>/<?= count($liste) ?></small></a>
+            <a href="collection.php?album=holo"<?= $vueHolo ? ' aria-current="page"' : '' ?>>Album holo <small><?= count($holos) ?>/<?= count($liste) ?></small></a>
+        </nav>
+        <?php if ($vueHolo): ?>
+            <p class="info-expedition">Chaque carte d'un booster holographique (1 chance sur <?= CHANCE_HOLO ?>, 1 sur <?= CHANCE_HOLO_SAISON ?> avec le paquet de saison) débloque la version holo du champion.</p>
+        <?php endif; ?>
         <div class="recherche recherche-objets">
             <input class="champ" type="search" id="rechercheChampion" placeholder="Chercher un champion, ex. Ah" aria-label="Chercher un champion" autocomplete="off">
         </div>
@@ -159,13 +175,19 @@ $liste = array_merge(array_intersect_key($liste, $favoris), $liste);
             $nom = $champ['name'] ?? $cle;
             $nb = $possedes[$cle] ?? 0;
             $e = (int) ($etoiles[$cle] ?? 1);
+            $estHolo = isset($holos[$cle]);
+            if ($vueHolo && !$estHolo) $nb = 0; // album holo : un champion sans sa version holo est une case vide
+            $pertes = array_filter([$e > 1 ? "ses $e étoiles" : '', $estHolo ? 'sa version holo' : '']); // perdu si on recycle le dernier exemplaire
         ?>
             <?php if ($nb): ?>
             <div class="case-possedee" id="carte-<?= htmlspecialchars($cle) ?>" data-nom="<?= htmlspecialchars($nom) ?>">
-                <div class="carte">
+                <div class="carte<?= $estHolo ? ' carte-holo' : '' ?>">
                     <img src="https://ddragon.leagueoflegends.com/cdn/img/champion/loading/<?= urlencode($cle) ?>_<?= (int) $skinsEquipes[$cle] ?>.jpg" alt="<?= htmlspecialchars($nom) ?>" width="154" height="280" loading="lazy">
                     <h4><?= htmlspecialchars($nom) ?></h4>
                     <span class="etoiles" role="img" aria-label="<?= $e ?> étoile<?= $e > 1 ? 's' : '' ?> sur <?= ETOILES_MAX ?>"><?= str_repeat('★', $e) . str_repeat('☆', ETOILES_MAX - $e) ?></span>
+                    <?php if ($estHolo): $eh = (int) $etoilesHolo[$cle]; ?>
+                        <span class="niveau-holo" aria-label="Holo <?= $eh ?> étoile<?= $eh > 1 ? 's' : '' ?>, +<?= $eh * BONUS_HOLO ?> % de stats en duel">Holo <?= str_repeat('★', $eh) ?> +<?= $eh * BONUS_HOLO ?> %</span>
+                    <?php endif; ?>
                     <p><?= htmlspecialchars($champ['title'] ?? '') ?></p>
                     <?php if ($nb > 1): ?><span class="badge" aria-label="<?= $nb ?> exemplaires">×<?= $nb ?></span><?php endif; ?>
                     <?php if (in_array($cle, $partis, true)): ?><a class="etiquette-expedition" href="expeditions.php">En expédition</a><?php endif; ?>
@@ -176,17 +198,26 @@ $liste = array_merge(array_intersect_key($liste, $favoris), $liste);
                     <button class="bouton-recycler" disabled title="En expédition">Recycler <span>+<?= RUBIS_PAR_CARTE ?></span></button>
                     <?php else: ?>
                     <button class="bouton-recycler" name="action" value="recycler"
-                        <?php if ($nb == 1): ?>onclick="return confirm('C\'est ton seul exemplaire de <?= htmlspecialchars(addslashes($nom)) ?>. Le recycler quand même ?<?= $e > 1 ? " Tu perdras ses $e étoiles." : '' ?>')"<?php endif; ?>>
+                        <?php if ($nb == 1): ?>onclick="return confirm('C\'est ton seul exemplaire de <?= htmlspecialchars(addslashes($nom)) ?>. Le recycler quand même ?<?= $pertes ? ' Tu perdras ' . implode(' et ', $pertes) . '.' : '' ?>')"<?php endif; ?>>
                         Recycler <span>+<?= RUBIS_PAR_CARTE ?></span>
                     </button>
                     <?php endif; ?>
                 </form>
-                <?php if ($e < ETOILES_MAX): $cout = coutEtoile($e); ?>
+                <?php if ($e < ETOILES_MAX): $cout = coutEtoile($e); $normaux = max(0, $nb - ($holos[$cle] ?? 0) - 1); // doublons normaux ?>
                 <form method="post">
                     <input type="hidden" name="cle" value="<?= htmlspecialchars($cle) ?>">
-                    <button class="bouton-recycler bouton-etoile" name="action" value="etoile"<?= $nb - 1 < $cout ? ' disabled' : '' ?>
-                        title="Fusionne <?= $cout ?> doublon<?= $cout > 1 ? 's' : '' ?> pour passer à <?= $e + 1 ?> étoiles (+<?= BONUS_ETOILE ?> % de stats en duel)">
-                        Améliorer <span>★ <?= min($nb - 1, $cout) ?>/<?= $cout ?></span>
+                    <button class="bouton-recycler bouton-etoile" name="action" value="etoile"<?= $normaux < $cout ? ' disabled' : '' ?>
+                        title="Fusionne <?= $cout ?> doublon<?= $cout > 1 ? 's' : '' ?> normal<?= $cout > 1 ? 'aux' : '' ?> pour passer à <?= $e + 1 ?> étoiles (+<?= BONUS_ETOILE ?> % de stats en duel)">
+                        Améliorer <span>★ <?= min($normaux, $cout) ?>/<?= $cout ?></span>
+                    </button>
+                </form>
+                <?php endif; ?>
+                <?php if ($estHolo && $etoilesHolo[$cle] < ETOILES_MAX): $eh = (int) $etoilesHolo[$cle]; $coutHolo = coutEtoile($eh); $doublonsHolo = $holos[$cle] - 1; ?>
+                <form method="post">
+                    <input type="hidden" name="cle" value="<?= htmlspecialchars($cle) ?>">
+                    <button class="bouton-recycler bouton-etoile bouton-etoile-holo" name="action" value="etoile_holo"<?= $doublonsHolo < $coutHolo ? ' disabled' : '' ?>
+                        title="Fusionne <?= $coutHolo ?> doublon<?= $coutHolo > 1 ? 's' : '' ?> holo pour passer à <?= $eh + 1 ?> étoiles holo (+<?= BONUS_HOLO ?> % de stats en duel)">
+                        Améliorer holo <span>★ <?= min($doublonsHolo, $coutHolo) ?>/<?= $coutHolo ?></span>
                     </button>
                 </form>
                 <?php endif; ?>

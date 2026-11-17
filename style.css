@@ -308,6 +308,43 @@ main { max-width: 1180px; margin: 0 auto; padding: 32px 16px 64px; }
 .paquet.holo .paquet-pastille { color: #fff; border-color: #fff; background: rgb(0 0 0 / .35); }
 .paquet.holo::before, .paquet.holo::after { background: linear-gradient(90deg, transparent, #fff 20% 80%, transparent); }
 
+/* Version holo d'une carte (album holo) : cadre arc-en-ciel + reflet qui passe sur l'image */
+.carte-holo {
+    background: linear-gradient(115deg, #ff4d6d, #f4c84a, #5cf2a6, #4dc3ff, #b46bff, #ff4d6d) 0 0 / 300% 300%;
+    box-shadow: 0 0 22px rgb(180 107 255 / .5), 0 10px 28px rgb(0 0 0 / .35);
+    animation: holo-carte 4s linear infinite;
+}
+.carte-holo::before {
+    content: '';
+    position: absolute;
+    z-index: 1;
+    inset: 3px;
+    border-radius: 11px;
+    pointer-events: none;
+    background: linear-gradient(115deg, transparent 30%, rgb(255 255 255 / .35) 45%, rgb(180 107 255 / .3) 52%, transparent 65%) 0 0 / 300% 100%;
+    mix-blend-mode: screen;
+    animation: holo-carte 4s linear infinite;
+}
+/* Niveau holo (bonus en duel) : sous les étoiles sur une carte, sous le nom dans le choix des duels */
+.niveau-holo {
+    padding: 1px 8px;
+    border-radius: 999px;
+    color: #fff;
+    background: linear-gradient(90deg, #ff4d6d, #b46bff, #4dc3ff);
+    font-size: .7rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+.carte .niveau-holo { position: absolute; z-index: 2; top: 56px; left: 12px; }
+.bouton-etoile-holo { border-color: #b46bff; }
+.bouton-etoile-holo span { color: #c99bff; }
+@keyframes holo-carte {
+    to { background-position: 300% 300%; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .carte-holo, .carte-holo::before { animation: none; }
+}
+
 .infos { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 0 0 20px; }
 .info {
     margin: 0;
@@ -383,6 +420,11 @@ main { max-width: 1180px; margin: 0 auto; padding: 32px 16px 64px; }
 .suggestion-recyclage p { flex: 1 1 260px; margin: 0; }
 .suggestion-recyclage .bouton { width: auto; }
 .suggestion-recyclage[hidden] { display: none; }
+.onglets-album { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-bottom: 16px; }
+.onglets-album a { padding: 8px 18px; border: 1px solid var(--trait); border-radius: 999px; color: var(--doux); font-weight: 700; text-decoration: none; }
+.onglets-album a:hover { color: var(--encre); }
+.onglets-album a[aria-current="page"] { color: var(--sur-bouton); background: var(--or); border-color: transparent; }
+.onglets-album small { opacity: .75; }
 .case-possedee { display: flex; flex-direction: column; gap: 6px; }
 .case-possedee[hidden], .case-vide[hidden], .choix-carte[hidden] { display: none; } /* recherche */
 .bouton-recycler {
