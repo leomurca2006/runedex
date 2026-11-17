@@ -469,7 +469,7 @@ function profilJoueur($pdo, $id) {
 // Chaque action du joueur fait avancer un compteur (avancerMission). Affichées et récupérées dans defis.php.
 const MISSIONS = [
     'booster'     => ['texte' => 'Ouvrir %d boosters',                 'jour' => 5,  'semaine' => 25],
-    'duel'        => ['texte' => 'Faire %d duels',                     'jour' => 3,  'semaine' => 3],
+    'duel'        => ['texte' => 'Faire %d duels',                     'jour' => 3,  'semaine' => 15],
     'expedition'  => ['texte' => 'Envoyer %d champions en expédition', 'jour' => 2,  'semaine' => 10],
     'recyclage'   => ['texte' => 'Recycler %d cartes',                 'jour' => 10, 'semaine' => 50],
     'etoile'      => ['texte' => 'Améliorer %d fois un champion',      'jour' => 1,  'semaine' => 5],
