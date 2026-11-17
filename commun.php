@@ -223,6 +223,13 @@ function bonusCarte($carte) {
     return ($carte['etoiles'] - 1) * BONUS_ETOILE + ($carte['holo'] > 0 ? $carte['etoiles_holo'] * BONUS_HOLO : 0);
 }
 
+// Rangée d'étoiles d'une carte : dorées (normales) ou violettes (holo), ex. ★★★☆☆
+function htmlEtoiles($etoiles, $holo = false) {
+    $etoiles = (int) $etoiles;
+    return '<span class="etoiles' . ($holo ? ' etoiles-holo' : '') . '" role="img" aria-label="' . $etoiles . ' étoile' . ($etoiles > 1 ? 's' : '')
+        . ($holo ? ' holo' : '') . ' sur ' . ETOILES_MAX . '">' . str_repeat('★', $etoiles) . str_repeat('☆', ETOILES_MAX - $etoiles) . '</span>';
+}
+
 function coutEtoile($etoiles) {
     return 2 ** ($etoiles - 1);
 }
@@ -493,7 +500,7 @@ function profilJoueur($pdo, $id) {
     $req->execute([$id]);
     $profil = $req->fetch();
     if (!$profil) return null;
-    $req = $pdo->prepare('SELECT champion, skin, etoiles, holo FROM cartes WHERE compte_id = ?');
+    $req = $pdo->prepare('SELECT champion, skin, etoiles, holo, etoiles_holo FROM cartes WHERE compte_id = ?');
     $req->execute([$id]);
     $cartes = array_column($req->fetchAll(), null, 'champion'); // ['Ahri' => ['champion' => 'Ahri', 'skin' => 0, 'etoiles' => 3, 'holo' => 1], ...]
     $profil['avatar'] = $cartes[$profil['avatar']] ?? null;

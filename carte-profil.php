@@ -32,11 +32,11 @@ $portrait = fn($carte) => 'https://ddragon.leagueoflegends.com/cdn/img/champion/
         <p class="info-expedition">Aucune carte en vitrine pour l'instant.</p>
     <?php endif; ?>
     <div class="vitrine">
-        <?php foreach ($profil['vitrine'] as $carte): $cle = $carte['champion']; $nom = $champions[$cle]['name'] ?? $cle; $e = (int) $carte['etoiles']; ?>
+        <?php foreach ($profil['vitrine'] as $carte): $cle = $carte['champion']; $nom = $champions[$cle]['name'] ?? $cle; ?>
             <div class="carte<?= $carte['holo'] ? ' carte-holo' : '' ?>">
                 <img src="<?= htmlspecialchars($portrait($carte)) ?>" alt="<?= htmlspecialchars($nom) ?>" width="154" height="280" loading="lazy">
                 <h4><?= htmlspecialchars($nom) ?></h4>
-                <span class="etoiles" role="img" aria-label="<?= $e ?> étoile<?= $e > 1 ? 's' : '' ?> sur <?= ETOILES_MAX ?>"><?= str_repeat('★', $e) . str_repeat('☆', ETOILES_MAX - $e) ?></span>
+                <?= $carte['holo'] ? htmlEtoiles($carte['etoiles_holo'], true) : htmlEtoiles($carte['etoiles']) // carte holo = ses étoiles holo ?>
                 <p><?= htmlspecialchars($champions[$cle]['title'] ?? '') ?></p>
             </div>
         <?php endforeach; ?>

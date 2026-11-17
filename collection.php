@@ -181,17 +181,21 @@ $liste = array_merge(array_intersect_key($liste, $favoris), $liste);
         ?>
             <?php if ($nb): ?>
             <div class="case-possedee" id="carte-<?= htmlspecialchars($cle) ?>" data-nom="<?= htmlspecialchars($nom) ?>">
-                <div class="carte<?= $estHolo ? ' carte-holo' : '' ?>">
+                <?php
+                    // Deux cartes séparées : la normale dans l'Album, la holo dans l'Album holo, chacune avec ses étoiles et ses exemplaires
+                    $eh = (int) ($etoilesHolo[$cle] ?? 1);
+                    $exemplaires = $vueHolo ? $holos[$cle] : $nb - ($holos[$cle] ?? 0);
+                ?>
+                <div class="carte<?= $vueHolo ? ' carte-holo' : '' ?>">
                     <img src="https://ddragon.leagueoflegends.com/cdn/img/champion/loading/<?= urlencode($cle) ?>_<?= (int) $skinsEquipes[$cle] ?>.jpg" alt="<?= htmlspecialchars($nom) ?>" width="154" height="280" loading="lazy">
                     <h4><?= htmlspecialchars($nom) ?></h4>
-                    <span class="etoiles" role="img" aria-label="<?= $e ?> étoile<?= $e > 1 ? 's' : '' ?> sur <?= ETOILES_MAX ?>"><?= str_repeat('★', $e) . str_repeat('☆', ETOILES_MAX - $e) ?></span>
-                    <?php if ($estHolo): $eh = (int) $etoilesHolo[$cle]; ?>
-                        <span class="niveau-holo" aria-label="Holo <?= $eh ?> étoile<?= $eh > 1 ? 's' : '' ?>, +<?= $eh * BONUS_HOLO ?> % de stats en duel">Holo <?= str_repeat('★', $eh) ?> +<?= $eh * BONUS_HOLO ?> %</span>
-                    <?php endif; ?>
+                    <?= $vueHolo ? htmlEtoiles($eh, true) : htmlEtoiles($e) ?>
+                    <?php if ($vueHolo): ?><span class="niveau-holo">+<?= $eh * BONUS_HOLO ?> % en duel</span><?php endif; ?>
                     <p><?= htmlspecialchars($champ['title'] ?? '') ?></p>
-                    <?php if ($nb > 1): ?><span class="badge" aria-label="<?= $nb ?> exemplaires">×<?= $nb ?></span><?php endif; ?>
+                    <?php if ($exemplaires > 1): ?><span class="badge" aria-label="<?= $exemplaires ?> exemplaires<?= $vueHolo ? ' holo' : '' ?>">×<?= $exemplaires ?></span><?php endif; ?>
                     <?php if (in_array($cle, $partis, true)): ?><a class="etiquette-expedition" href="expeditions.php">En expédition</a><?php endif; ?>
                 </div>
+                <?php if (!$vueHolo): // on recycle depuis l'Album normal (un exemplaire normal part en premier) ?>
                 <form method="post">
                     <input type="hidden" name="cle" value="<?= htmlspecialchars($cle) ?>">
                     <?php if ($nb == 1 && in_array($cle, $partis, true)): // occupé : son dernier exemplaire ne peut pas être recyclé ?>
@@ -203,7 +207,8 @@ $liste = array_merge(array_intersect_key($liste, $favoris), $liste);
                     </button>
                     <?php endif; ?>
                 </form>
-                <?php if ($e < ETOILES_MAX): $cout = coutEtoile($e); $normaux = max(0, $nb - ($holos[$cle] ?? 0) - 1); // doublons normaux ?>
+                <?php endif; ?>
+                <?php if (!$vueHolo && $e < ETOILES_MAX): $cout = coutEtoile($e); $normaux = max(0, $nb - ($holos[$cle] ?? 0) - 1); // doublons normaux ?>
                 <form method="post">
                     <input type="hidden" name="cle" value="<?= htmlspecialchars($cle) ?>">
                     <button class="bouton-recycler bouton-etoile" name="action" value="etoile"<?= $normaux < $cout ? ' disabled' : '' ?>
@@ -212,7 +217,7 @@ $liste = array_merge(array_intersect_key($liste, $favoris), $liste);
                     </button>
                 </form>
                 <?php endif; ?>
-                <?php if ($estHolo && $etoilesHolo[$cle] < ETOILES_MAX): $eh = (int) $etoilesHolo[$cle]; $coutHolo = coutEtoile($eh); $doublonsHolo = $holos[$cle] - 1; ?>
+                <?php if ($vueHolo && $eh < ETOILES_MAX): $coutHolo = coutEtoile($eh); $doublonsHolo = $holos[$cle] - 1; ?>
                 <form method="post">
                     <input type="hidden" name="cle" value="<?= htmlspecialchars($cle) ?>">
                     <button class="bouton-recycler bouton-etoile bouton-etoile-holo" name="action" value="etoile_holo"<?= $doublonsHolo < $coutHolo ? ' disabled' : '' ?>

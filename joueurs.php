@@ -39,7 +39,7 @@ foreach ($joueurs as $rang => $joueur) {
 }
 if ($profil) {
     $profil = profilJoueur($pdo, $id) + ['rang' => $profil['rang']]; // avatar, vitrine... pour carte-profil.php
-    $req = $pdo->prepare('SELECT champion, nombre, skin, etoiles, holo FROM cartes WHERE compte_id = ? ORDER BY champion');
+    $req = $pdo->prepare('SELECT champion, nombre, skin, etoiles, holo, etoiles_holo FROM cartes WHERE compte_id = ? ORDER BY champion');
     $req->execute([$id]);
     $cartes = $req->fetchAll();
     $champions = listeChampions() ?? [];
@@ -89,11 +89,11 @@ if ($profil) {
             <p class="message">Ce joueur n'a pas encore de carte.</p>
         <?php endif; ?>
         <div class="album">
-            <?php foreach ($cartes as $carte): $cle = $carte['champion']; $nom = $champions[$cle]['name'] ?? $cle; $e = (int) $carte['etoiles']; ?>
+            <?php foreach ($cartes as $carte): $cle = $carte['champion']; $nom = $champions[$cle]['name'] ?? $cle; ?>
                 <div class="carte<?= $carte['holo'] ? ' carte-holo' : '' ?>">
                     <img src="https://ddragon.leagueoflegends.com/cdn/img/champion/loading/<?= urlencode($cle) ?>_<?= (int) $carte['skin'] ?>.jpg" alt="<?= h($nom) ?>" width="154" height="280" loading="lazy">
                     <h4><?= h($nom) ?></h4>
-                    <span class="etoiles" role="img" aria-label="<?= $e ?> étoile<?= $e > 1 ? 's' : '' ?> sur <?= ETOILES_MAX ?>"><?= str_repeat('★', $e) . str_repeat('☆', ETOILES_MAX - $e) ?></span>
+                    <?= $carte['holo'] ? htmlEtoiles($carte['etoiles_holo'], true) : htmlEtoiles($carte['etoiles']) // carte holo = ses étoiles holo ?>
                     <p><?= h($champions[$cle]['title'] ?? '') ?></p>
                     <?php if ($carte['nombre'] > 1): ?><span class="badge" aria-label="<?= $carte['nombre'] ?> exemplaires">×<?= $carte['nombre'] ?></span><?php endif; ?>
                 </div>

@@ -336,6 +336,7 @@ main { max-width: 1180px; margin: 0 auto; padding: 32px 16px 64px; }
     white-space: nowrap;
 }
 .carte .niveau-holo { position: absolute; z-index: 2; top: 56px; left: 12px; }
+.carte .etoiles-holo { color: #d9b8ff; text-shadow: 0 0 6px #b46bff, 0 1px 3px rgb(0 0 0 / .8); }
 .bouton-etoile-holo { border-color: #b46bff; }
 .bouton-etoile-holo span { color: #c99bff; }
 @keyframes holo-carte {
