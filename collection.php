@@ -30,6 +30,14 @@ if ($action === 'favori') {
     exit;
 }
 
+// Étoile : on fusionne des doublons pour faire monter le champion
+if ($action === 'etoile') {
+    $cle = (string) ($_POST['cle'] ?? '');
+    $_SESSION['message'] = ameliorerCarte($pdo, $_SESSION['id'], $cle) ? 'Une étoile de plus !' : 'Pas assez de doublons.';
+    header('Location: collection.php#carte-' . urlencode($cle));
+    exit;
+}
+
 // Recyclage : on traite le formulaire puis on recharge la page (évite de recycler 2 fois avec F5)
 if ($action === 'recycler' || $action === 'doublons') {
     $gain = $action === 'doublons'
@@ -43,12 +51,13 @@ $message = $_SESSION['message'] ?? '';
 unset($_SESSION['message']);
 $rubis = etatRubis($pdo, $_SESSION['id']);
 
-$req = $pdo->prepare('SELECT champion, nombre, skin, favori FROM cartes WHERE compte_id = ? ORDER BY champion');
+$req = $pdo->prepare('SELECT champion, nombre, skin, favori, etoiles FROM cartes WHERE compte_id = ? ORDER BY champion');
 $req->execute([$_SESSION['id']]);
 $lignes = $req->fetchAll();
 $possedes = array_column($lignes, 'nombre', 'champion'); // ['Ahri' => 2, ...]
 $skinsEquipes = array_column($lignes, 'skin', 'champion'); // ['Ahri' => 0, ...]
 $favoris = array_filter(array_column($lignes, 'favori', 'champion')); // ['Ahri' => 1, ...] (seulement les favoris)
+$etoiles = array_column($lignes, 'etoiles', 'champion'); // ['Ahri' => 3, ...]
 // Skins débloqués : ['Ahri' => [1, 4], ...]
 $mesSkins = [];
 $req = $pdo->prepare('SELECT champion, num FROM skins_debloques WHERE compte_id = ? ORDER BY num');
@@ -149,12 +158,14 @@ $liste = array_merge(array_intersect_key($liste, $favoris), $liste);
         <?php foreach ($liste as $cle => $champ):
             $nom = $champ['name'] ?? $cle;
             $nb = $possedes[$cle] ?? 0;
+            $e = (int) ($etoiles[$cle] ?? 1);
         ?>
             <?php if ($nb): ?>
             <div class="case-possedee" id="carte-<?= htmlspecialchars($cle) ?>" data-nom="<?= htmlspecialchars($nom) ?>">
                 <div class="carte">
                     <img src="https://ddragon.leagueoflegends.com/cdn/img/champion/loading/<?= urlencode($cle) ?>_<?= (int) $skinsEquipes[$cle] ?>.jpg" alt="<?= htmlspecialchars($nom) ?>" width="154" height="280" loading="lazy">
                     <h4><?= htmlspecialchars($nom) ?></h4>
+                    <span class="etoiles" role="img" aria-label="<?= $e ?> étoile<?= $e > 1 ? 's' : '' ?> sur <?= ETOILES_MAX ?>"><?= str_repeat('★', $e) . str_repeat('☆', ETOILES_MAX - $e) ?></span>
                     <p><?= htmlspecialchars($champ['title'] ?? '') ?></p>
                     <?php if ($nb > 1): ?><span class="badge" aria-label="<?= $nb ?> exemplaires">×<?= $nb ?></span><?php endif; ?>
                     <?php if (in_array($cle, $partis, true)): ?><a class="etiquette-expedition" href="expeditions.php">En expédition</a><?php endif; ?>
@@ -165,11 +176,20 @@ $liste = array_merge(array_intersect_key($liste, $favoris), $liste);
                     <button class="bouton-recycler" disabled title="En expédition">Recycler <span>+<?= RUBIS_PAR_CARTE ?></span></button>
                     <?php else: ?>
                     <button class="bouton-recycler" name="action" value="recycler"
-                        <?php if ($nb == 1): ?>onclick="return confirm('C\'est ton seul exemplaire de <?= htmlspecialchars(addslashes($nom)) ?>. Le recycler quand même ?')"<?php endif; ?>>
+                        <?php if ($nb == 1): ?>onclick="return confirm('C\'est ton seul exemplaire de <?= htmlspecialchars(addslashes($nom)) ?>. Le recycler quand même ?<?= $e > 1 ? " Tu perdras ses $e étoiles." : '' ?>')"<?php endif; ?>>
                         Recycler <span>+<?= RUBIS_PAR_CARTE ?></span>
                     </button>
                     <?php endif; ?>
                 </form>
+                <?php if ($e < ETOILES_MAX): $cout = coutEtoile($e); ?>
+                <form method="post">
+                    <input type="hidden" name="cle" value="<?= htmlspecialchars($cle) ?>">
+                    <button class="bouton-recycler bouton-etoile" name="action" value="etoile"<?= $nb - 1 < $cout ? ' disabled' : '' ?>
+                        title="Fusionne <?= $cout ?> doublon<?= $cout > 1 ? 's' : '' ?> pour passer à <?= $e + 1 ?> étoiles (+<?= BONUS_ETOILE ?> % de stats en duel)">
+                        Améliorer <span>★ <?= min($nb - 1, $cout) ?>/<?= $cout ?></span>
+                    </button>
+                </form>
+                <?php endif; ?>
                 <?php $nbSkins = count($mesSkins[$cle] ?? []); ?>
                 <button class="bouton-recycler bouton-skins" data-cle="<?= htmlspecialchars($cle) ?>" data-nom="<?= htmlspecialchars($nom) ?>"
                     data-skins="<?= htmlspecialchars(json_encode($mesSkins[$cle] ?? [])) ?>" data-equipe="<?= (int) $skinsEquipes[$cle] ?>">

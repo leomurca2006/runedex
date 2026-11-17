@@ -397,7 +397,8 @@ main { max-width: 1180px; margin: 0 auto; padding: 32px 16px 64px; }
 .bouton-recycler span { color: #ff4d6d; }
 .bouton-recycler:hover { color: var(--encre); border-color: #ff4d6d; }
 .bouton-recycler:disabled { opacity: .4; cursor: not-allowed; }
-.bouton-skins span { color: var(--or); }
+.bouton-skins span, .bouton-etoile span, .choix-etoiles { color: var(--or); }
+.carte .etoiles { position: absolute; z-index: 1; top: 34px; left: 12px; color: var(--or); font-size: .85rem; letter-spacing: 1px; text-shadow: 0 1px 3px rgb(0 0 0 / .8); }
 .bouton-skins:hover { border-color: var(--or); }
 .bouton-favori { display: flex; align-items: center; justify-content: center; gap: 4px; }
 .bouton-favori i { font-size: 1rem; }

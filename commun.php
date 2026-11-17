@@ -198,6 +198,27 @@ $pdo->exec('CREATE TABLE IF NOT EXISTS skins_debloques (
 ajouterColonne($pdo, 'cartes', 'skin', 'INTEGER NOT NULL DEFAULT 0'); // skin équipé : celui affiché sur la carte dans la collection
 ajouterColonne($pdo, 'cartes', 'favori', 'INTEGER NOT NULL DEFAULT 0'); // 1 = carte en favori (affichée en premier dans la collection)
 
+// Étoiles : on fusionne des doublons pour faire monter un champion de 1 à 5 étoiles.
+// Passer de e à e+1 étoiles coûte 2^(e-1) doublons : 1, 2, 4 puis 8 (15 en tout).
+// Chaque étoile au-dessus de 1 donne +10 % de stats en duel.
+const ETOILES_MAX = 5;
+const BONUS_ETOILE = 10;
+ajouterColonne($pdo, 'cartes', 'etoiles', 'INTEGER NOT NULL DEFAULT 1');
+
+function coutEtoile($etoiles) {
+    return 2 ** ($etoiles - 1);
+}
+
+// +1 étoile en consommant des doublons (on garde toujours 1 exemplaire) ; renvoie false s'il n'y en a pas assez.
+// Une seule requête : deux clics en même temps ne dépensent pas deux fois les mêmes doublons.
+// En SQL, 1 << (etoiles - 1) = coutEtoile(etoiles).
+function ameliorerCarte($pdo, $compteId, $cle) {
+    $req = $pdo->prepare('UPDATE cartes SET nombre = nombre - (1 << (etoiles - 1)), etoiles = etoiles + 1
+        WHERE compte_id = ? AND champion = ? AND etoiles < ? AND nombre - 1 >= (1 << (etoiles - 1))');
+    $req->execute([$compteId, $cle, ETOILES_MAX]);
+    return $req->rowCount() === 1;
+}
+
 // Skins d'un champion : [num => nom], sans le skin de base. null si Riot ne répond pas.
 function skinsChampion($cle) {
     $json = @file_get_contents('https://ddragon.leagueoflegends.com/cdn/' . VERSION . '/data/fr_FR/champion/' . rawurlencode($cle) . '.json');
