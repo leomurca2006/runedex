@@ -19,6 +19,16 @@ $joueurs = $pdo->query("SELECT c.id, c.pseudo, c.palier_duel,
     (SELECT COUNT(*) FROM defis_reussis WHERE compte_id = c.id) AS defis
     FROM comptes c ORDER BY champions DESC, skins DESC, c.pseudo")->fetchAll();
 
+// Saison du mois : classement, jours restants et podium du mois dernier (s'il y en a un)
+$saison = saisonActuelle();
+$classementSaison = classementSaison($pdo, $saison);
+$joursRestants = (int) date('t') - (int) date('j');
+$req = $pdo->prepare('SELECT podium FROM saisons WHERE saison = ?');
+$req->execute([saisonPrecedente()]);
+$podiumPrecedent = json_decode($req->fetchColumn() ?: '[]', true);
+$actionsSaison = ['booster' => 'booster ouvert', 'expedition' => 'expédition lancée', 'fabrication' => 'objet fabriqué',
+    'etoile' => 'étoile gagnée', 'mission' => 'mission récupérée', 'victoire' => 'nouveau palier ou étage battu en duel'];
+
 // joueurs.php?id=3 : la collection de ce joueur
 $id = (int) ($_GET['id'] ?? 0);
 $profil = null;
@@ -91,6 +101,39 @@ if ($profil) {
         </div>
     <?php else: ?>
         <h1>Joueurs</h1>
+        <section class="panneau bloc-echanges">
+            <h2>Saison : <?= nomSaison($saison) ?></h2>
+            <p class="info-expedition">
+                Classement remis à zéro chaque mois. <?= $joursRestants ? "Fin dans $joursRestants jour" . ($joursRestants > 1 ? 's' : '') . '.' : 'Dernier jour !' ?>
+                Le top 3 gagne <?= implode(', ', RECOMPENSES_SAISON) ?> rubis.
+                Pense aussi au paquet de saison dans <a href="booster.html">Boosters</a>.
+            </p>
+            <p class="info-expedition">Points : <?= implode(', ', array_map(fn($action) => '+' . POINTS_SAISON[$action] . ' par ' . $actionsSaison[$action], array_keys(POINTS_SAISON))) ?>.</p>
+            <?php if (!$classementSaison): ?>
+                <p>Personne n'a encore de points ce mois-ci : à toi de jouer !</p>
+            <?php else: ?>
+            <table class="classement">
+                <thead>
+                    <tr><th>#</th><th>Joueur</th><th>Points</th><th>Récompense</th></tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($classementSaison as $rang => $joueur): ?>
+                        <tr<?= (int) $joueur['id'] === $moi ? ' class="moi"' : '' ?>>
+                            <td><?= $rang + 1 ?></td>
+                            <td><a href="joueurs.php?id=<?= $joueur['id'] ?>"><?= h($joueur['pseudo']) ?></a><?= (int) $joueur['id'] === $moi ? ' (toi)' : '' ?></td>
+                            <td><?= $joueur['points'] ?></td>
+                            <td><?= isset(RECOMPENSES_SAISON[$rang]) ? '+' . RECOMPENSES_SAISON[$rang] . ' rubis' : '' ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+            <?php endif; ?>
+            <?php if ($podiumPrecedent): ?>
+                <p class="info-expedition">Podium de la saison passée (<?= nomSaison(saisonPrecedente()) ?>) :
+                    <?= implode(', ', array_map(fn($joueur, $rang) => ($rang + 1) . '. ' . h($joueur['pseudo']) . " ({$joueur['points']} pts)", $podiumPrecedent, array_keys($podiumPrecedent))) ?>
+                </p>
+            <?php endif; ?>
+        </section>
         <section class="panneau bloc-echanges">
             <h2>Classement</h2>
             <table class="classement">

@@ -12,7 +12,7 @@ $connecte = isset($_SESSION['id']);
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     // Les paquets sont visibles par tout le monde, le stock seulement si on est connecté
-    $reponse = ['connecte' => $connecte, 'paquets' => PAQUETS];
+    $reponse = ['connecte' => $connecte, 'paquets' => tousLesPaquets($pdo)]; // avec celui de la saison
     echo json_encode($connecte ? $reponse + etatStock($pdo, $_SESSION['id']) + etatRubis($pdo, $_SESSION['id']) + etatQuotidien($pdo, $_SESSION['id']) : $reponse);
     exit;
 }
@@ -25,7 +25,7 @@ if (!$connecte) {
 $id = $_SESSION['id'];
 
 // On ne fait jamais confiance à ce qu'envoie le navigateur : on vérifie le paquet et le nombre
-$paquet = PAQUETS[(string) ($_POST['paquet'] ?? '')] ?? null;
+$paquet = tousLesPaquets($pdo)[(string) ($_POST['paquet'] ?? '')] ?? null;
 $nombre = (int) ($_POST['nombre'] ?? 1);
 if ($paquet === null || !in_array($nombre, NOMBRES_AUTORISES, true)) {
     http_response_code(400);
@@ -37,9 +37,12 @@ $type = $paquet['type'];
 // On récupère les cartes possibles AVANT de payer : si Riot ne répond pas, le joueur ne perd rien
 if ($type === 'champions') {
     $champions = listeChampions();
-    $tirables = $champions === null ? null : ($paquet['classe'] === null
-        ? $champions
-        : array_filter($champions, fn($champ) => in_array($paquet['classe'], $champ['tags'], true)));
+    $tirables = match (true) {
+        $champions === null => null,
+        isset($paquet['champions']) => array_intersect_key($champions, array_flip($paquet['champions'])), // paquet de saison
+        $paquet['classe'] === null => $champions,
+        default => array_filter($champions, fn($champ) => in_array($paquet['classe'], $champ['tags'], true)),
+    };
 } else {
     $objets = listeObjets();
     $tirables = $objets === null ? null : array_filter($objets, fn($objet) => $objet['type'] === $type);
@@ -91,7 +94,7 @@ $possedes = array_flip($req->fetchAll(PDO::FETCH_COLUMN));
 $boosters = [];
 $holos = []; // true/false pour chaque booster
 for ($b = 0; $b < $nombre; $b++) {
-    $holo = random_int(1, CHANCE_HOLO) === 1;
+    $holo = random_int(1, $paquet['chanceHolo'] ?? CHANCE_HOLO) === 1;
     $holos[] = $holo;
     $n = $holo ? NB_CARTES_HOLO : NB_CARTES;
     // Cartes différentes dans un booster ; si le paquet en a moins de 50 (ex. Supports), on complète au hasard

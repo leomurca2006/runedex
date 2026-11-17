@@ -521,20 +521,22 @@ function missionsDuMoment($compteId) {
     return $missions;
 }
 
-// Le joueur a fait $nombre fois l'action : on compte pour le jour ET la semaine (même si la mission n'est pas tirée, c'est plus simple)
+// Le joueur a fait $nombre fois l'action : on compte pour le jour, la semaine (même si la mission n'est pas tirée,
+// c'est plus simple) et la saison (points du classement mensuel, voir POINTS_SAISON)
 function avancerMission($pdo, $compteId, $action, $nombre = 1) {
     if ($nombre <= 0) return;
     $req = $pdo->prepare('INSERT INTO missions (compte_id, periode, action, nombre) VALUES (?, ?, ?, ?)
         ON CONFLICT (compte_id, periode, action) DO UPDATE SET nombre = nombre + excluded.nombre');
-    foreach (periodesMissions() as $periode) {
+    foreach ([...array_values(periodesMissions()), saisonActuelle()] as $periode) {
         $req->execute([$compteId, $periode, $action, $nombre]);
     }
 }
 
-// Missions en cours avec la progression ("fait" et "reclamee") ; efface au passage les compteurs des périodes finies
+// Missions en cours avec la progression ("fait" et "reclamee") ; efface au passage les compteurs des jours et semaines finis
+// (ceux des saisons, "m...", sont gardés : ils servent au classement et au podium)
 function etatMissions($pdo, $compteId) {
     $periodes = array_values(periodesMissions());
-    $pdo->prepare('DELETE FROM missions WHERE compte_id = ? AND periode NOT IN (?, ?)')->execute([$compteId, ...$periodes]);
+    $pdo->prepare("DELETE FROM missions WHERE compte_id = ? AND periode NOT IN (?, ?) AND periode NOT LIKE 'm%'")->execute([$compteId, ...$periodes]);
     $req = $pdo->prepare('SELECT periode, action, nombre, reclamee FROM missions WHERE compte_id = ?');
     $req->execute([$compteId]);
     $compteurs = [];
@@ -561,6 +563,94 @@ function reclamerMission($pdo, $compteId, $cle) {
         return 0;
     }
     $pdo->prepare('UPDATE comptes SET rubis = rubis + ? WHERE id = ?')->execute([$mission['rubis'], $compteId]);
+    avancerMission($pdo, $compteId, 'mission'); // points de saison
     $pdo->commit();
     return $mission['rubis'];
+}
+
+// ---------- Saisons (une par mois, heure de Paris) ----------
+// Classement remis à zéro chaque mois : les points viennent des compteurs de la table "missions" (période "m2026-11").
+// Seulement des actions limitées (stock, rubis, temps...) : pas de points pour les duels perdus, on pourrait en faire à l'infini.
+const POINTS_SAISON = ['booster' => 1, 'expedition' => 5, 'fabrication' => 5, 'etoile' => 10, 'mission' => 10, 'victoire' => 20];
+const RECOMPENSES_SAISON = [500, 300, 150]; // rubis du 1er, 2e et 3e, versés au début du mois suivant
+const CHAMPIONS_SAISON = 20;   // le paquet de saison ne contient que 20 champions, différents chaque mois...
+const CHANCE_HOLO_SAISON = 25; // ...et donne un booster holographique 1 fois sur 25 (au lieu de 100)
+const MOIS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+
+// Une ligne par saison : les champions de son paquet (JSON) et le podium une fois la saison finie (JSON, null avant)
+$pdo->exec('CREATE TABLE IF NOT EXISTS saisons (
+    saison TEXT PRIMARY KEY, -- "m2026-11"
+    champions TEXT,
+    podium TEXT
+)');
+
+function saisonActuelle() {
+    return 'm' . date('Y-m');
+}
+function saisonPrecedente() {
+    return 'm' . date('Y-m', strtotime('first day of last month'));
+}
+// "m2026-11" => "novembre 2026"
+function nomSaison($saison) {
+    [$annee, $mois] = explode('-', substr($saison, 1));
+    return MOIS[(int) $mois - 1] . " $annee";
+}
+
+// Classement d'une saison : [['id' => 3, 'pseudo' => 'Léo', 'points' => 120], ...], du meilleur au moins bon
+function classementSaison($pdo, $saison) {
+    $cas = '';
+    foreach (POINTS_SAISON as $action => $points) $cas .= ' WHEN ' . $pdo->quote($action) . ' THEN ' . (int) $points;
+    $req = $pdo->prepare("SELECT c.id, c.pseudo, SUM(m.nombre * CASE m.action $cas ELSE 0 END) AS points
+        FROM missions m JOIN comptes c ON c.id = m.compte_id
+        WHERE m.periode = ? GROUP BY c.id HAVING points > 0 ORDER BY points DESC, c.pseudo");
+    $req->execute([$saison]);
+    return $req->fetchAll();
+}
+
+// Fin de saison : au premier passage du mois, on paie le top 3 du mois dernier et on garde le podium.
+// "podium IS NULL" dans l'UPDATE : même si deux pages se chargent en même temps, on ne paie qu'une fois.
+function cloturerSaison($pdo) {
+    $saison = saisonPrecedente();
+    $req = $pdo->prepare('SELECT podium FROM saisons WHERE saison = ?');
+    $req->execute([$saison]);
+    if (is_string($req->fetchColumn())) return; // déjà fait (le cas le plus courant : une seule petite requête)
+    $pdo->beginTransaction();
+    $pdo->prepare('INSERT OR IGNORE INTO saisons (saison) VALUES (?)')->execute([$saison]);
+    $podium = array_slice(classementSaison($pdo, $saison), 0, count(RECOMPENSES_SAISON));
+    foreach ($podium as $rang => &$joueur) $joueur['rubis'] = RECOMPENSES_SAISON[$rang];
+    unset($joueur);
+    $req = $pdo->prepare('UPDATE saisons SET podium = ? WHERE saison = ? AND podium IS NULL');
+    $req->execute([json_encode($podium), $saison]);
+    if ($req->rowCount() === 1) {
+        $paie = $pdo->prepare('UPDATE comptes SET rubis = rubis + ? WHERE id = ?');
+        foreach ($podium as $joueur) $paie->execute([$joueur['rubis'], $joueur['id']]);
+    }
+    $pdo->commit();
+}
+cloturerSaison($pdo);
+
+// Le paquet de la saison (même format que PAQUETS + "champions" et "chanceHolo"), null si Riot ne répond pas.
+// Les 20 champions sont tirés une fois par mois (graine fixe) puis gardés en base : pas d'appel à Riot à chaque page.
+function paquetSaison($pdo) {
+    $saison = saisonActuelle();
+    $req = $pdo->prepare('SELECT champions FROM saisons WHERE saison = ?');
+    $req->execute([$saison]);
+    $champions = json_decode($req->fetchColumn() ?: 'null', true);
+    if (!$champions) {
+        $liste = listeChampions();
+        if ($liste === null) return null;
+        mt_srand(crc32("saison-$saison"));
+        $champions = array_map('strval', array_rand($liste, CHAMPIONS_SAISON));
+        mt_srand();
+        $pdo->prepare('INSERT INTO saisons (saison, champions) VALUES (?, ?) ON CONFLICT (saison) DO UPDATE SET champions = excluded.champions')
+            ->execute([$saison, json_encode($champions)]);
+    }
+    return ['nom' => 'Saison', 'sousTitre' => ucfirst(nomSaison($saison)) . ' seulement', 'type' => 'champions', 'classe' => null,
+        'image' => "champion/$champions[0].png", 'champions' => $champions, 'chanceHolo' => CHANCE_HOLO_SAISON];
+}
+
+// Tous les paquets à proposer : celui de la saison en premier, puis ceux de PAQUETS
+function tousLesPaquets($pdo) {
+    $saison = paquetSaison($pdo);
+    return $saison ? ['saison' => $saison] + PAQUETS : PAQUETS;
 }

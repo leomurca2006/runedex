@@ -159,8 +159,9 @@ boutonPersos.addEventListener('click', () => {
     ]);
     donneesPersos
         .then(([data, collection]) => {
-            const classe = paquets[choisi].classe; // null = tous les champions
-            const liste = Object.entries(data.data).filter(([cle, champ]) => !classe || champ.tags.includes(classe));
+            const { classe, champions } = paquets[choisi]; // classe null = tous ; "champions" = liste fixe (paquet de saison)
+            const liste = Object.entries(data.data).filter(([cle, champ]) =>
+                champions ? champions.includes(cle) : !classe || champ.tags.includes(classe));
             const possedes = collection ? liste.filter(([cle]) => collection[cle]).length : 0;
             document.getElementById('infoPersos').textContent = collection
                 ? `${liste.length} champions, tu en as ${possedes}.`

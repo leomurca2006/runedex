@@ -53,7 +53,10 @@ $gain = 0;
 if ($victoire) { // plus de dernier palier : après le 10, c'est la tour infinie
     $req = $pdo->prepare('UPDATE comptes SET palier_duel = palier_duel + 1, rubis = rubis + :gain WHERE id = :id AND palier_duel = :palier');
     $req->execute(['gain' => gainPalier($palier), 'id' => $id, 'palier' => $palier]);
-    if ($req->rowCount() === 1) $gain = gainPalier($palier);
+    if ($req->rowCount() === 1) {
+        $gain = gainPalier($palier);
+        avancerMission($pdo, $id, 'victoire'); // points de saison : seulement pour un nouveau palier ou étage
+    }
 }
 
 echo json_encode([

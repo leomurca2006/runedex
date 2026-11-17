@@ -266,6 +266,7 @@ main { max-width: 1180px; margin: 0 auto; padding: 32px 16px 64px; }
 .paquet-tank       { --base: #a9a9a9; }
 .paquet-composants { --base: #c9772f; }
 .paquet-objets     { --base: #ff4d6d; }
+.paquet-saison     { --base: #4fd1e8; }
 
 .paquet-marque { font: 400 .8em var(--titre); letter-spacing: .2em; color: #c8aa6e; }
 /* médaillon hexagonal avec un liseré doré */
