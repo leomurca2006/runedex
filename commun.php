@@ -683,3 +683,18 @@ function tousLesPaquets($pdo) {
     $saison = paquetSaison($pdo);
     return $saison ? ['saison' => $saison] + PAQUETS : PAQUETS;
 }
+
+// ---------- Marché entre joueurs (onglet Marché de echanges.php) ----------
+// Un joueur met un doublon normal en vente à un prix en rubis ; la carte quitte sa collection pendant la vente
+// (elle ne peut donc pas être vendue deux fois) et lui revient s'il retire l'annonce.
+const ANNONCES_MAX = 10;        // annonces en cours par joueur
+const PRIX_MAX_ANNONCE = 5000;  // rubis
+$pdo->exec('CREATE TABLE IF NOT EXISTS annonces (
+    id INTEGER PRIMARY KEY,
+    vendeur_id INTEGER NOT NULL REFERENCES comptes(id),
+    champion TEXT NOT NULL,
+    prix INTEGER NOT NULL,
+    cree INTEGER NOT NULL,
+    acheteur_id INTEGER REFERENCES comptes(id), -- NULL = encore en vente
+    vendu INTEGER                               -- date de la vente
+)');

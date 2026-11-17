@@ -672,6 +672,12 @@ main { max-width: 1180px; margin: 0 auto; padding: 32px 16px 64px; }
 .statut-echange { display: inline-block; min-width: 92px; margin-right: 8px; font-weight: 700; color: var(--doux); }
 .statut-accepte { color: var(--or); }
 
+/* Onglet Marché de la page Échanges */
+.onglets-echanges { justify-content: flex-start; margin-bottom: 24px; }
+.formulaire-vente { display: flex; flex-direction: column; gap: 8px; max-width: 360px; }
+.formulaire-vente label { font-weight: 700; }
+.panneau .formulaire-vente .bouton { width: auto; align-self: flex-start; margin-top: 8px; }
+
 /* ---------- Page Expéditions (reprend les blocs de la page Échanges) ---------- */
 .bloc-echanges h2 small { color: var(--doux); font-size: .8em; }
 .expedition {

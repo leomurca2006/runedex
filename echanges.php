@@ -25,8 +25,84 @@ function terminer($message, $avec = '') {
     exit;
 }
 
+// Pareil pour les actions du marché : on revient sur l'onglet Marché
+function terminerMarche($message) {
+    $_SESSION['message'] = $message;
+    header('Location: echanges.php?vue=marche');
+    exit;
+}
+
 $action = $_POST['action'] ?? '';
 $idEchange = (int) ($_POST['echange'] ?? 0);
+$idAnnonce = (int) ($_POST['annonce'] ?? 0);
+
+// ---------- Marché ----------
+if ($action === 'vendre') {
+    $cle = (string) ($_POST['champion'] ?? '');
+    $prix = (int) ($_POST['prix'] ?? 0);
+    if ($prix < 1 || $prix > PRIX_MAX_ANNONCE) terminerMarche('Le prix doit être entre 1 et ' . PRIX_MAX_ANNONCE . ' rubis.');
+    $pdo->beginTransaction();
+    $req = $pdo->prepare('SELECT COUNT(*) FROM annonces WHERE vendeur_id = ? AND acheteur_id IS NULL');
+    $req->execute([$moi]);
+    if ($req->fetchColumn() >= ANNONCES_MAX) {
+        $pdo->rollBack();
+        terminerMarche('Tu as déjà ' . ANNONCES_MAX . ' annonces en cours. Attends une vente ou retire une annonce.');
+    }
+    // Seulement un doublon normal : on garde toujours 1 exemplaire (et ses étoiles), les holos ne se vendent pas
+    $req = $pdo->prepare('UPDATE cartes SET nombre = nombre - 1 WHERE compte_id = ? AND champion = ? AND nombre - holo - 1 >= 1');
+    $req->execute([$moi, $cle]);
+    if ($req->rowCount() === 0) {
+        $pdo->rollBack();
+        terminerMarche('Tu ne peux vendre que tes doublons normaux (tu gardes toujours 1 exemplaire, et les holos ne se vendent pas).');
+    }
+    $pdo->prepare('INSERT INTO annonces (vendeur_id, champion, prix, cree) VALUES (?, ?, ?, ?)')->execute([$moi, $cle, $prix, time()]);
+    $pdo->commit();
+    terminerMarche('Ta carte est en vente !');
+}
+
+if ($action === 'acheter') {
+    $pdo->beginTransaction();
+    $req = $pdo->prepare('SELECT * FROM annonces WHERE id = ? AND acheteur_id IS NULL AND vendeur_id != ?');
+    $req->execute([$idAnnonce, $moi]);
+    $annonce = $req->fetch();
+    if (!$annonce) {
+        $pdo->rollBack();
+        terminerMarche('Cette carte n\'est plus en vente.');
+    }
+    // Chaque étape vérifie elle-même sa condition : pas d'achat sans les rubis, pas de carte vendue deux fois
+    $req = $pdo->prepare('UPDATE comptes SET rubis = rubis - ? WHERE id = ? AND rubis >= ?');
+    $req->execute([$annonce['prix'], $moi, $annonce['prix']]);
+    if ($req->rowCount() === 0) {
+        $pdo->rollBack();
+        terminerMarche('Pas assez de rubis pour cette carte.');
+    }
+    $req = $pdo->prepare('UPDATE annonces SET acheteur_id = ?, vendu = ? WHERE id = ? AND acheteur_id IS NULL');
+    $req->execute([$moi, time(), $idAnnonce]);
+    if ($req->rowCount() === 0) {
+        $pdo->rollBack();
+        terminerMarche('Trop tard : quelqu\'un vient de l\'acheter.');
+    }
+    $pdo->prepare('UPDATE comptes SET rubis = rubis + ? WHERE id = ?')->execute([$annonce['prix'], $annonce['vendeur_id']]);
+    ajouterCarte($pdo, $moi, $annonce['champion']);
+    $pdo->commit();
+    terminerMarche('Achat réussi ! La carte est dans ta collection.');
+}
+
+if ($action === 'retirer') {
+    $pdo->beginTransaction();
+    $req = $pdo->prepare('SELECT champion FROM annonces WHERE id = ? AND vendeur_id = ? AND acheteur_id IS NULL');
+    $req->execute([$idAnnonce, $moi]);
+    $champion = $req->fetchColumn();
+    $req = $pdo->prepare('DELETE FROM annonces WHERE id = ? AND vendeur_id = ? AND acheteur_id IS NULL');
+    $req->execute([$idAnnonce, $moi]);
+    if ($champion === false || $req->rowCount() === 0) {
+        $pdo->rollBack();
+        terminerMarche('Cette annonce n\'existe plus (la carte a peut-être été vendue).');
+    }
+    ajouterCarte($pdo, $moi, $champion); // la carte revient dans la collection
+    $pdo->commit();
+    terminerMarche('Annonce retirée, la carte est de retour dans ta collection.');
+}
 
 if ($action === 'proposer') {
     $autre = (int) ($_POST['autre'] ?? 0);
@@ -85,6 +161,32 @@ $nom = fn($cle) => $champions[$cle]['name'] ?? $cle;
 $image = fn($cle) => 'https://ddragon.leagueoflegends.com/cdn/img/champion/loading/' . urlencode($cle) . '_0.jpg';
 
 $mesCartes = cartesDe($pdo, $moi);
+
+// Onglet Marché (echanges.php?vue=marche)
+$vueMarche = ($_GET['vue'] ?? '') === 'marche';
+if ($vueMarche) {
+    $req = $pdo->prepare('SELECT rubis FROM comptes WHERE id = ?');
+    $req->execute([$moi]);
+    $mesRubis = (int) $req->fetchColumn();
+    // Les cartes des autres en vente, les plus récentes d'abord
+    $req = $pdo->prepare('SELECT a.*, c.pseudo FROM annonces a JOIN comptes c ON c.id = a.vendeur_id
+        WHERE a.acheteur_id IS NULL AND a.vendeur_id != ? ORDER BY a.cree DESC LIMIT 100');
+    $req->execute([$moi]);
+    $enVente = $req->fetchAll();
+    $req = $pdo->prepare('SELECT * FROM annonces WHERE vendeur_id = ? AND acheteur_id IS NULL ORDER BY cree DESC');
+    $req->execute([$moi]);
+    $mesAnnonces = $req->fetchAll();
+    // Mes doublons normaux, les seuls qu'on peut vendre : ['Ahri' => 2, ...]
+    $req = $pdo->prepare('SELECT champion, nombre - holo - 1 FROM cartes WHERE compte_id = ? AND nombre - holo - 1 >= 1 ORDER BY champion');
+    $req->execute([$moi]);
+    $vendables = $req->fetchAll(PDO::FETCH_KEY_PAIR);
+    // Mes dernières ventes et mes derniers achats
+    $req = $pdo->prepare('SELECT a.*, v.pseudo AS vendeur, ach.pseudo AS acheteur FROM annonces a
+        JOIN comptes v ON v.id = a.vendeur_id JOIN comptes ach ON ach.id = a.acheteur_id
+        WHERE a.acheteur_id IS NOT NULL AND (a.vendeur_id = ? OR a.acheteur_id = ?) ORDER BY a.vendu DESC LIMIT 10');
+    $req->execute([$moi, $moi]);
+    $ventes = $req->fetchAll();
+}
 
 // Les autres joueurs
 $req = $pdo->prepare('SELECT id, pseudo FROM comptes WHERE id != ? ORDER BY pseudo');
@@ -162,9 +264,87 @@ function grilleChoix($nomChamp, $cartes, $nom, $image, $mesCartes = null) {
     </header>
     <main class="page-echanges">
         <h1>Échanges</h1>
+        <nav class="onglets-album onglets-echanges" aria-label="Échanges ou marché">
+            <a href="echanges.php"<?= $vueMarche ? '' : ' aria-current="page"' ?>>Échanges 1 contre 1</a>
+            <a href="echanges.php?vue=marche"<?= $vueMarche ? ' aria-current="page"' : '' ?>>Marché</a>
+        </nav>
         <?php if ($message): ?>
             <p class="message" role="status"><?= h($message) ?></p>
         <?php endif; ?>
+
+        <?php if ($vueMarche): ?>
+        <section class="panneau bloc-echanges">
+            <h2>En vente <small>tu as <i class="material-icons rubis-icone" aria-hidden="true">diamond</i><?= $mesRubis ?> rubis</small></h2>
+            <?php if (!$enVente): ?>
+                <p>Aucune carte en vente pour l'instant. Reviens plus tard, ou mets tes propres doublons en vente ci-dessous.</p>
+            <?php endif; ?>
+            <?php foreach ($enVente as $a): ?>
+                <div class="echange">
+                    <?= $miniCarte($a['champion']) ?>
+                    <p class="echange-texte"><strong><?= h($nom($a['champion'])) ?></strong> vendu par <a href="joueurs.php?id=<?= $a['vendeur_id'] ?>"><?= h($a['pseudo']) ?></a>
+                        <?php if (!isset($mesCartes[$a['champion']])): ?><span class="etiquette etiquette-nouveau">Nouveau pour toi</span><?php endif; ?></p>
+                    <form method="post" class="echange-actions">
+                        <input type="hidden" name="annonce" value="<?= $a['id'] ?>">
+                        <button class="bouton bouton-or" name="action" value="acheter"<?= $mesRubis < $a['prix'] ? ' disabled title="Pas assez de rubis"' : '' ?>>
+                            Acheter <?= $a['prix'] ?> rubis
+                        </button>
+                    </form>
+                </div>
+            <?php endforeach; ?>
+        </section>
+
+        <section class="panneau bloc-echanges">
+            <h2>Vendre un doublon</h2>
+            <?php if (!$vendables): ?>
+                <p>Tu n'as pas de doublon normal à vendre. Tu gardes toujours 1 exemplaire de chaque champion, et les holos ne se vendent pas.</p>
+            <?php elseif (count($mesAnnonces) >= ANNONCES_MAX): ?>
+                <p>Tu as déjà <?= ANNONCES_MAX ?> annonces en cours : attends une vente ou retire une annonce.</p>
+            <?php else: ?>
+                <form method="post" class="formulaire-vente">
+                    <label for="champion">Carte</label>
+                    <select class="champ" id="champion" name="champion" required>
+                        <?php foreach ($vendables as $cle => $nb): ?>
+                            <option value="<?= h($cle) ?>"><?= h($nom($cle)) ?> (<?= $nb ?> en double)</option>
+                        <?php endforeach; ?>
+                    </select>
+                    <label for="prix">Prix en rubis</label>
+                    <input class="champ" id="prix" name="prix" type="number" min="1" max="<?= PRIX_MAX_ANNONCE ?>" value="<?= RUBIS_PAR_CARTE * 10 ?>" required>
+                    <button class="bouton bouton-or" name="action" value="vendre">Mettre en vente</button>
+                </form>
+                <p class="info-expedition">La carte quitte ta collection pendant la vente. Tu peux retirer l'annonce à tout moment pour la récupérer. (Recycler une carte rapporte <?= RUBIS_PAR_CARTE ?> rubis.)</p>
+            <?php endif; ?>
+        </section>
+
+        <?php if ($mesAnnonces): ?>
+        <section class="panneau bloc-echanges">
+            <h2>Tes annonces <small><?= count($mesAnnonces) ?>/<?= ANNONCES_MAX ?></small></h2>
+            <?php foreach ($mesAnnonces as $a): ?>
+                <div class="echange">
+                    <?= $miniCarte($a['champion']) ?>
+                    <p class="echange-texte"><strong><?= h($nom($a['champion'])) ?></strong> en vente pour <strong><?= $a['prix'] ?> rubis</strong>.</p>
+                    <form method="post" class="echange-actions">
+                        <input type="hidden" name="annonce" value="<?= $a['id'] ?>">
+                        <button class="bouton bouton-secondaire" name="action" value="retirer">Retirer</button>
+                    </form>
+                </div>
+            <?php endforeach; ?>
+        </section>
+        <?php endif; ?>
+
+        <?php if ($ventes): ?>
+        <section class="panneau bloc-echanges">
+            <h2>Tes dernières ventes et achats</h2>
+            <ul class="historique">
+                <?php foreach ($ventes as $a): $vendeur = (int) $a['vendeur_id'] === $moi; ?>
+                    <li>
+                        <span class="statut-echange<?= $vendeur ? ' statut-accepte' : '' ?>"><?= $vendeur ? 'Vendu' : 'Acheté' ?></span>
+                        <?= h($nom($a['champion'])) ?> pour <?= $a['prix'] ?> rubis <?= $vendeur ? 'à ' . h($a['acheteur']) : 'à ' . h($a['vendeur']) ?>
+                    </li>
+                <?php endforeach; ?>
+            </ul>
+        </section>
+        <?php endif; ?>
+        <?php else: ?>
 
         <?php if ($recus): ?>
         <section class="panneau bloc-echanges">
@@ -257,6 +437,7 @@ function grilleChoix($nomChamp, $cartes, $nom, $image, $mesCartes = null) {
             </ul>
         </section>
         <?php endif; ?>
+        <?php endif; // fin de l'onglet Échanges ?>
     </main>
     <script src="main.js"></script>
 </body>
