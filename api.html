@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rechercher un champion — Runedex</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Dela+Gothic+One&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header class="entete">
+        <a class="logo" href="booster.html">Runedex</a>
+        <ul class="menu">
+            <li><a class="menuItem" href="booster.html">Booster</a></li>
+            <li><a class="menuItem" href="collection.php">Collection</a></li>
+            <li><a class="menuItem" href="echanges.php">Échanges</a></li>
+            <li><a class="menuItem" href="expeditions.php">Expéditions</a></li>
+            <li><a class="menuItem" href="duels.php">Duels</a></li>
+            <li><a class="menuItem" href="objets.html">Objets</a></li>
+            <li><a class="menuItem" href="defis.php">Défis</a></li>
+            <li><a class="menuItem" href="joueurs.php">Joueurs</a></li>
+            <li><a class="menuItem" href="api.html" aria-current="page">Rechercher un champion</a></li>
+            <li><a class="menuItem" href="compte.php">Compte</a></li>
+        </ul>
+        <button class="ChangementDeMode">Mode clair</button>
+        <button class="hamburger" aria-label="Menu">
+            <i class="menuIcon material-icons">menu</i>
+            <i class="closeIcon material-icons">close</i>
+        </button>
+    </header>
+    <main>
+        <div class="recherche">
+            <input class="champ" type="search" id="searchChampion" placeholder="Tape le début d'un nom, ex. Ah" aria-label="Nom du champion" autocomplete="off">
+        </div>
+        <p class="resultats-info" id="resultatsInfo" aria-live="polite"></p>
+        <div class="resultats" id="resultats"></div>
+
+        <div id="championDetail"></div>
+
+<script>
+const VERSION = '14.8.1';
+const champSaisie = document.getElementById('searchChampion');
+const resultats = document.getElementById('resultats');
+const resultatsInfo = document.getElementById('resultatsInfo');
+let champions = [];    // [[cle, champ], ...] chargés une seule fois au début
+let debloques = null;  // {cle: nombre} si connecté, null sinon
+
+// "Kai'Sa" -> "kaisa", "Rek'Sai" -> "reksai" : on ignore majuscules, accents et apostrophes
+function simplifier(texte) {
+    return texte.toLowerCase().normalize('NFD').replace(/[^a-z0-9]/g, '');
+}
+console.assert(simplifier("Kai'Sa") === 'kaisa' && simplifier('Nunu et Willump') === 'nunuetwillump', 'simplifier()');
+
+Promise.all([
+    fetch('APISite.php?champions=1').then(Response => Response.json()),
+    fetch('APICollection.php').then(Response => Response.ok ? Response.json() : null)
+])
+    .then(([data, collection]) => {
+        champions = Object.entries(data.data);
+        debloques = collection;
+        afficherResultats();
+    })
+    .catch(err => console.error('Erreur :', err));
+
+// Se met à jour à chaque lettre tapée
+champSaisie.addEventListener('input', afficherResultats);
+
+function afficherResultats() {
+    const debut = simplifier(champSaisie.value);
+    if (!debut) {
+        resultats.innerHTML = '';
+        resultatsInfo.textContent = debloques ? '' : 'Connecte-toi pour voir quels champions tu as débloqués.';
+        return;
+    }
+    const trouves = champions.filter(([key, champ]) => simplifier(champ.name).startsWith(debut));
+    resultatsInfo.textContent = trouves.length
+        ? `${trouves.length} champion${trouves.length > 1 ? 's' : ''}`
+        : `Aucun champion ne commence par « ${champSaisie.value} ».`;
+
+    resultats.innerHTML = trouves.map(([key, champ]) => {
+        const nombre = debloques ? (debloques[key] || 0) : null;
+        const statut = nombre === null ? '' : nombre
+            ? `<span class="statut statut-oui">Débloqué${nombre > 1 ? ` ×${nombre}` : ''}</span>`
+            : '<span class="statut">Pas encore</span>';
+        return `
+            <button class="resultat${nombre === 0 ? ' verrouille' : ''}" data-cle="${key}">
+                <img src="https://ddragon.leagueoflegends.com/cdn/${VERSION}/img/champion/${key}.png" width="48" height="48" alt="">
+                <span class="resultat-nom">${champ.name}</span>
+                ${statut}
+            </button>`;
+    }).join('');
+}
+
+// Clic sur un résultat : on affiche sa fiche
+resultats.addEventListener('click', event => {
+    const bouton = event.target.closest('.resultat');
+    if (bouton) afficherDetail(bouton.dataset.cle);
+});
+
+function afficherDetail(key) {
+    return fetch(`APISite.php?champion=${key}`)
+        .then(Response => Response.json())
+        .then(detail => {
+            const champ = detail.data[key];
+            const div = document.getElementById('championDetail');
+
+            div.innerHTML = `
+                <article class="fiche panneau">
+                    <img src="https://ddragon.leagueoflegends.com/cdn/${VERSION}/img/champion/${key}.png" width="120" height="120" alt="">
+                    <div>
+                        <h2>${champ.name}, ${champ.title}</h2>
+                        <p>${champ.lore}</p>
+                        <ul class="fiche-stats">
+                            <li><strong>Rôles :</strong> ${champ.tags.join(', ')}</li>
+                            <li><strong>Difficulté :</strong> ${champ.info.difficulty} / 10</li>
+                            <li><strong>Attaque :</strong> ${champ.info.attack} / 10</li>
+                            <li><strong>Défense :</strong> ${champ.info.defense} / 10</li>
+                            <li><strong>Magie :</strong> ${champ.info.magic} / 10</li>
+                        </ul>
+                        <h3>Sorts</h3>
+                        ${champ.spells.map(spell => `
+                            <div class="sort">
+                                <img src="https://ddragon.leagueoflegends.com/cdn/${VERSION}/img/spell/${spell.image.full}" width="40" height="40" alt="">
+                                <div>
+                                    <strong>${spell.name}</strong>
+                                    <p>${spell.description}</p>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </article>
+            `;
+            div.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        })
+        .catch(err => console.error('Erreur :', err));
+}
+</script>
+    </main>
+    <script src="main.js"></script>
+</body>
+</html>

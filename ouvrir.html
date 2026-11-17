@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ouverture — Runedex</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Dela+Gothic+One&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="page-ouvrir">
+    <a class="fermer" href="booster.html" aria-label="Fermer et revenir aux boosters"><i class="material-icons">close</i></a>
+    <div class="particules" id="particules" aria-hidden="true"></div>
+
+    <!-- 1. Le paquet à déchirer -->
+    <section class="scene" id="scene">
+        <p class="consigne" id="consigne">Glisse le long du haut pour déchirer</p>
+        <div class="scene-paquet" id="scenePaquet">
+            <div class="pile" aria-hidden="true">
+                <div class="dos" style="--k:4"></div>
+                <div class="dos" style="--k:3"></div>
+                <div class="dos" style="--k:2"></div>
+                <div class="dos" style="--k:1"></div>
+                <div class="dos" style="--k:0"></div>
+            </div>
+            <div class="paquet-a-ouvrir">
+                <div class="paquet-entier" id="paquetEntier"></div>
+                <div class="morceau morceau-haut" id="morceauHaut"></div>
+                <div class="morceau morceau-bas" id="morceauBas"></div>
+                <div class="faisceau" aria-hidden="true"></div>
+                <div class="eclats" id="eclats" aria-hidden="true"></div>
+                <div class="ligne" id="ligne" aria-hidden="true"></div>
+                <div class="bande" id="bande" aria-hidden="true"></div>
+            </div>
+        </div>
+        <fieldset class="quantite">
+            <legend class="visuellement-cache">Nombre de boosters à ouvrir</legend>
+            <label><input type="radio" name="nombre" value="1" checked><span>×1</span></label>
+            <label><input type="radio" name="nombre" value="5"><span>×5</span></label>
+            <label><input type="radio" name="nombre" value="10"><span>×10</span></label>
+        </fieldset>
+        <button class="bouton bouton-or" id="boutonOuvrir">Ouvrir</button>
+        <p class="info-stock" id="infoStock" aria-live="polite"></p>
+    </section>
+
+    <!-- 2. Révélation, carte par carte -->
+    <section class="revelation" id="revelation" hidden>
+        <p class="compteur" id="compteur">0/5</p>
+        <p class="numero-booster" id="numeroBooster"></p>
+        <div class="zone-carte" id="zoneCarte" role="button" tabindex="0" aria-label="Révéler la carte suivante">
+            <div class="halo" aria-hidden="true"></div>
+            <div class="retournable" id="retournable">
+                <div class="dos"></div>
+                <div class="face" id="face"></div>
+            </div>
+        </div>
+        <div class="legende" id="legende" aria-live="polite"></div>
+        <div class="miniatures" id="miniatures"></div>
+        <p class="aide">Clique, glisse ou appuie sur Espace. Maintiens Espace pour aller plus vite.</p>
+        <button class="bouton bouton-secondaire" id="toutReveler">Tout révéler</button>
+    </section>
+
+    <!-- 3. Récapitulatif -->
+    <section class="recap" id="recap" hidden>
+        <h1>Ton tirage</h1>
+        <div class="eventails" id="eventails"></div>
+        <p class="resume" id="resume"></p>
+        <!-- Suggestion de recyclage, affichée s'il y a des doublons dans la collection -->
+        <div class="suggestion-recyclage panneau" id="suggestionRecyclage" hidden>
+            <i class="material-icons rubis-icone" aria-hidden="true">diamond</i>
+            <p id="texteRecyclage"></p>
+            <button class="bouton bouton-or" id="recyclerDoublons">Recycler les doublons</button>
+        </div>
+        <div class="actions">
+            <button class="bouton bouton-or" id="encore">Ouvrir un autre</button>
+            <a class="bouton bouton-secondaire" id="changer" href="booster.html">Changer de booster</a>
+            <a class="bouton bouton-secondaire" href="collection.php">Voir la collection</a>
+        </div>
+    </section>
+
+    <!-- Fiche d'un champion, ouverte en cliquant sur une carte du récapitulatif -->
+    <dialog class="fiche-modale" id="ficheModale" aria-labelledby="ficheTitre">
+        <button class="fermer fermer-modale" id="fermerModale" aria-label="Fermer la fiche"><i class="material-icons">close</i></button>
+        <div class="fiche-contenu" id="ficheContenu"></div>
+    </dialog>
+
+    <script src="paquets.js"></script>
+    <script src="ouvrir.js"></script>
+</body>
+</html>

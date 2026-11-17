@@ -1,0 +1,7 @@
+# Base de données (déjà hors du dossier, par sécurité)
+*.sqlite
+# Énoncé du devoir (document de l'école)
+Devoir-front-back.pdf
+# Réglages locaux
+.claude/
+.vscode/
