@@ -44,6 +44,20 @@ if ($action === 'etoile' || $action === 'etoile_holo') {
     exit;
 }
 
+// Améliorer tout : on monte chaque champion d'autant d'étoiles que ses doublons le permettent
+if ($action === 'etoile_tout' || $action === 'etoile_holo_tout') {
+    $holo = $action === 'etoile_holo_tout';
+    $req = $pdo->prepare('SELECT champion FROM cartes WHERE compte_id = ?');
+    $req->execute([$_SESSION['id']]);
+    $gagnees = 0;
+    foreach ($req->fetchAll(PDO::FETCH_COLUMN) as $cle) {
+        while (ameliorerCarte($pdo, $_SESSION['id'], $cle, $holo)) $gagnees++;
+    }
+    $_SESSION['message'] = $gagnees ? "+$gagnees étoile" . ($gagnees > 1 ? 's' : '') . ($holo ? ' holo' : '') . ' !' : 'Pas assez de doublons.';
+    header('Location: ' . $retour);
+    exit;
+}
+
 // Recyclage : on traite le formulaire puis on recharge la page (évite de recycler 2 fois avec F5)
 if ($action === 'recycler' || $action === 'doublons') {
     $gain = $action === 'doublons'
@@ -164,6 +178,19 @@ $liste = array_merge(array_intersect_key($liste, $favoris), $liste);
             <a href="collection.php"<?= $vueHolo ? '' : ' aria-current="page"' ?>>Album <small><?= count($possedes) ?>/<?= count($liste) ?></small></a>
             <a href="collection.php?album=holo"<?= $vueHolo ? ' aria-current="page"' : '' ?>>Album holo <small><?= count($holos) ?>/<?= count($liste) ?></small></a>
         </nav>
+        <?php
+            // Cartes qu'on peut améliorer tout de suite dans l'album affiché (mêmes règles que ameliorerCarte)
+            $ameliorables = count(array_filter($lignes, fn($l) => $vueHolo
+                ? $l['etoiles_holo'] < ETOILES_MAX && $l['holo'] - 1 >= coutEtoile($l['etoiles_holo'])
+                : $l['etoiles'] < ETOILES_MAX && $l['nombre'] - $l['holo'] - 1 >= coutEtoile($l['etoiles'])));
+        ?>
+        <?php if ($ameliorables): ?>
+            <form method="post">
+                <button class="bouton bouton-or" name="action" value="<?= $vueHolo ? 'etoile_holo_tout' : 'etoile_tout' ?>">
+                    Améliorer tout<?= $vueHolo ? ' (holo)' : '' ?> · <?= $ameliorables ?> carte<?= $ameliorables > 1 ? 's' : '' ?>
+                </button>
+            </form>
+        <?php endif; ?>
         <?php if ($vueHolo): ?>
             <p class="info-expedition">Chaque carte d'un booster holographique (1 chance sur <?= CHANCE_HOLO ?>, 1 sur <?= CHANCE_HOLO_SAISON ?> avec le paquet de saison) débloque la version holo du champion.</p>
         <?php endif; ?>
