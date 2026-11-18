@@ -358,6 +358,8 @@ main { max-width: 1180px; margin: 0 auto; padding: 32px 16px 64px; }
 .info span { font-size: .85rem; color: var(--doux); }
 .panneau .bouton { width: 100%; }
 #minuteur { margin: 14px 0 0; color: var(--doux); font-variant-numeric: tabular-nums; }
+.info-pitie { margin: 10px 0 0; color: var(--doux); font-size: .9rem; }
+.info-pitie strong { color: #c99bff; }
 
 /* ---------- Page Collection ---------- */
 .album-tete {

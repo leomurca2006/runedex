@@ -7,6 +7,7 @@ const STOCK_MAX = 10;    // on ne peut pas en garder plus de 10 en réserve
 const NB_CARTES = 5;
 const CHANCE_HOLO = 100;     // 1 booster sur 100 est holographique...
 const NB_CARTES_HOLO = 50;   // ...et donne 50 cartes
+const PITIE_HOLO = 150;      // pitié : le 150e booster de champions d'affilée sans holo est forcément holo
 const VERSION = '14.8.1';
 
 // Les boosters proposés.
@@ -73,6 +74,7 @@ function ajouterColonne($pdo, $table, $colonne, $definition) {
 ajouterColonne($pdo, 'comptes', 'rubis', 'INTEGER NOT NULL DEFAULT 0');
 ajouterColonne($pdo, 'comptes', 'composants_achetes', 'INTEGER NOT NULL DEFAULT 0'); // total de boosters composants achetés
 ajouterColonne($pdo, 'comptes', 'boosters_objets', 'INTEGER NOT NULL DEFAULT 0');    // boosters d'objets complets à ouvrir
+ajouterColonne($pdo, 'comptes', 'pitie_holo', 'INTEGER NOT NULL DEFAULT 0');         // boosters de champions ouverts depuis le dernier holo
 
 // Exemplaires d'un champion protégés du recyclage des doublons : 1 normal + 1 par niveau holo (les holos sont à part)
 const GARDE_CHAMPIONS = 'holo + 1';
@@ -358,15 +360,18 @@ function listeObjets() {
 // Chaque tranche de 10 min écoulée depuis cette date = 1 booster, avec un maximum de 10.
 // Ouvrir un booster avance cette date de 10 min (= retire 1 booster du stock).
 function etatStock($pdo, $id) {
-    $req = $pdo->prepare('SELECT dernier_booster FROM comptes WHERE id = ?');
+    $req = $pdo->prepare('SELECT dernier_booster, pitie_holo FROM comptes WHERE id = ?');
     $req->execute([$id]);
-    $ecoule = time() - $req->fetchColumn();
+    $compte = $req->fetch();
+    $ecoule = time() - $compte['dernier_booster'];
     $stock = min(STOCK_MAX, intdiv($ecoule, ATTENTE));
     return [
         'stock' => $stock,
         'max' => STOCK_MAX,
         'attente' => ATTENTE,
         'reste' => $stock < STOCK_MAX ? ATTENTE - $ecoule % ATTENTE : 0, // secondes avant le prochain booster
+        'pitieHolo' => (int) $compte['pitie_holo'], // boosters de champions depuis le dernier holo
+        'pitieMax' => PITIE_HOLO,
     ];
 }
 
@@ -491,7 +496,7 @@ ajouterColonne($pdo, 'comptes', 'vitrine', "TEXT NOT NULL DEFAULT '[]'"); // cl�
 // Tout ce qu'affiche la carte de profil. Avatar et vitrine ne gardent que les champions encore possédés
 // (le joueur a pu les recycler ou les échanger depuis). Renvoie null si le compte n'existe pas.
 function profilJoueur($pdo, $id) {
-    $req = $pdo->prepare("SELECT pseudo, avatar, vitrine, palier_duel,
+    $req = $pdo->prepare("SELECT pseudo, avatar, vitrine, palier_duel, pitie_holo,
         (SELECT COUNT(*) FROM cartes WHERE compte_id = c.id) AS champions,
         (SELECT COUNT(*) FROM skins_debloques WHERE compte_id = c.id) AS skins,
         (SELECT COUNT(*) FROM objets_debloques WHERE compte_id = c.id AND type = 'objets') AS objets,

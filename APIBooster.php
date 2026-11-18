@@ -95,10 +95,20 @@ $req = $pdo->prepare('SELECT champion FROM cartes WHERE compte_id = ? AND holo >
 $req->execute([$id]);
 $holosPossedes = array_flip($req->fetchAll(PDO::FETCH_COLUMN));
 
+// Pitié : boosters de champions ouverts depuis le dernier holo (lu après le paiement, qui verrouille la base)
+$req = $pdo->prepare('SELECT pitie_holo FROM comptes WHERE id = ?');
+$req->execute([$id]);
+$pitie = (int) $req->fetchColumn();
+
 $boosters = [];
 $holos = []; // true/false pour chaque booster
 for ($b = 0; $b < $nombre; $b++) {
     $holo = random_int(1, $paquet['chanceHolo'] ?? CHANCE_HOLO) === 1;
+    if ($type === 'champions') {
+        $pitie++;
+        if ($pitie >= PITIE_HOLO) $holo = true; // le 150e d'affilée sans holo est garanti
+        if ($holo) $pitie = 0;
+    }
     $holos[] = $holo;
     $n = $holo ? NB_CARTES_HOLO : NB_CARTES;
     // Cartes différentes dans un booster ; si le paquet en a moins de 50 (ex. Supports), on complète au hasard
@@ -126,6 +136,7 @@ for ($b = 0; $b < $nombre; $b++) {
     $boosters[] = $cartes;
 }
 avancerMission($pdo, $id, 'booster', $nombre);
+$pdo->prepare('UPDATE comptes SET pitie_holo = ? WHERE id = ?')->execute([$pitie, $id]);
 $pdo->commit();
 
 echo json_encode(['boosters' => $boosters, 'holos' => $holos] + etatStock($pdo, $id) + etatRubis($pdo, $id));

@@ -7,6 +7,7 @@ const affichageStock = document.getElementById('stock');
 const nomPaquet = document.getElementById('nomPaquet');
 const sousTitre = document.getElementById('sousTitre');
 const stockLabel = document.getElementById('stockLabel');
+const pitie = document.getElementById('pitie');
 
 let paquets = {};
 let choisi = new URLSearchParams(location.search).get('paquet') || 'tous';
@@ -52,6 +53,11 @@ function majMinuteur() {
         bouton.disabled = etat.boostersObjets === 0;
         minuteur.textContent = texteOffert;
     }
+    // Pitié holo (boosters de champions seulement) : le holo est garanti au bout de pitieMax boosters sans holo
+    const restePitie = etat.pitieMax - etat.pitieHolo;
+    pitie.hidden = type !== 'champions';
+    pitie.innerHTML = `<strong>Holo garanti</strong> dans ${restePitie} booster${restePitie > 1 ? 's' : ''} au plus
+        <span class="barre"><span style="width:${100 * etat.pitieHolo / etat.pitieMax}%"></span></span>`;
     // L'achat à 180 rubis ajoute un booster de champions au stock : seulement pour ces paquets
     boutonAchat.hidden = type !== 'champions';
     infoAchat.hidden = type !== 'champions';    majAchat();
